@@ -1,0 +1,5 @@
+{
+  "name": "SAL - Sistema de Análise de Leitura",
+  "description": "Professional web system for reading analysis, technician performance monitoring, and technical installation inquiry, integrated with Supabase.",
+  "requestFramePermissions": []
+}
