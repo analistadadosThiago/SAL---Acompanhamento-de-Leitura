@@ -1,11 +1,11 @@
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { TABLE_NAME, IMPEDIMENTO_CODES, MONTH_ORDER } from '../constants';
-import { LeituraRecord, FilterState } from '../types';
+import { MONTH_ORDER } from '../constants';
+import { FilterState } from '../types';
 import IndicatorCard from './IndicatorCard';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { FileText, XCircle, CheckCircle, AlertTriangle, Filter, Layout, RefreshCw, AlertCircle, Play, ChevronDown, Check, Database, Terminal, Copy } from 'lucide-react';
+import { FileText, XCircle, CheckCircle, AlertTriangle, Filter, Layout, RefreshCw, AlertCircle, Play, ChevronDown, Check, Database, TrendingUp } from 'lucide-react';
 
 const VIEW_ANOS = "v_anos";
 const VIEW_MESES = "v_meses";
@@ -35,45 +35,57 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
 
   return (
     <div className="flex flex-col w-full relative" ref={dropdownRef}>
-      <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em] mb-2 flex justify-between items-center">
+      <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3 flex justify-between items-center px-1">
         {label}
         {selected.length > 0 && (
-          <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] shadow-lg shadow-blue-100">
-            {selected.length}
+          <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md text-[9px] shadow-lg shadow-blue-200">
+            {selected.length} selecionados
           </span>
         )}
       </label>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between w-full px-5 py-3.5 bg-white border-2 rounded-2xl text-sm transition-all duration-300 ${
-          isOpen ? 'border-blue-600 ring-8 ring-blue-50' : 'border-slate-100 hover:border-blue-200'
+        className={`flex items-center justify-between w-full px-5 py-4 bg-white border rounded-2xl text-sm transition-all duration-300 shadow-sm ${
+          isOpen ? 'border-blue-600 ring-4 ring-blue-50' : 'border-slate-200 hover:border-blue-400'
         } ${selected.length > 0 ? 'text-slate-900 font-bold' : 'text-slate-400'}`}
       >
         <span className="truncate pr-4 text-left">
           {selected.length > 0 ? selected.join(', ') : placeholder}
         </span>
-        <ChevronDown size={20} className={`flex-shrink-0 text-slate-300 transition-transform duration-500 ${isOpen ? 'rotate-180 text-blue-600' : ''}`} />
+        <ChevronDown size={18} className={`flex-shrink-0 text-slate-400 transition-transform duration-500 ${isOpen ? 'rotate-180 text-blue-600' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-[100] mt-3 bg-white border border-slate-100 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] max-h-80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="absolute top-full left-0 right-0 z-[100] mt-3 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="p-3 overflow-y-auto max-h-80 custom-scrollbar">
+            <div 
+              onClick={() => {
+                if (selected.length === options.length) {
+                  options.forEach(o => onToggle(o));
+                } else {
+                  options.filter(o => !selected.includes(o)).forEach(o => onToggle(o));
+                }
+              }}
+              className="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer hover:bg-slate-50 text-blue-600 font-bold text-xs uppercase mb-2 border border-blue-50"
+            >
+              {selected.length === options.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+            </div>
             {options.map((option) => (
               <div
                 key={option}
                 onClick={() => onToggle(option)}
                 className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 mb-1 group ${
                   selected.includes(option) 
-                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
                     : 'hover:bg-slate-50 text-slate-600'
                 }`}
               >
-                <span className="text-sm font-bold tracking-tight">{option}</span>
-                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                  selected.includes(option) ? 'bg-white border-white text-blue-600' : 'border-slate-100 bg-slate-50 group-hover:border-blue-200'
+                <span className="text-sm font-bold">{option}</span>
+                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                  selected.includes(option) ? 'bg-white border-white text-blue-600' : 'border-slate-200 bg-slate-50'
                 }`}>
-                  {selected.includes(option) && <Check size={16} strokeWidth={4} />}
+                  {selected.includes(option) && <Check size={14} strokeWidth={4} />}
                 </div>
               </div>
             ))}
@@ -84,12 +96,34 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
   );
 };
 
+interface Indicators {
+  leituras_a_realizar: number;
+  leituras_nao_realizadas: number;
+  leituras_realizadas: number;
+  percentual_impedimentos: number;
+}
+
+interface ChartData {
+  label: string;
+  value: number;
+}
+
+interface CardType {
+  tipo: string;
+  total: number;
+  nr: number;
+  r: number;
+  perc: number;
+}
+
 const Dashboard: React.FC = () => {
-  const [datasetFiltrado, setDatasetFiltrado] = useState<LeituraRecord[]>([]);
+  const [indicators, setIndicators] = useState<Indicators | null>(null);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [cards, setCards] = useState<CardType[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [fetchingMetadata, setFetchingMetadata] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isViewMissing, setIsViewMissing] = useState(false);
   const [isReportGenerated, setIsReportGenerated] = useState(false);
   
   const [availableFilters, setAvailableFilters] = useState<FilterState>({ 
@@ -104,33 +138,27 @@ const Dashboard: React.FC = () => {
     try {
       setFetchingMetadata(true);
       setErrorMsg(null);
-      setIsViewMissing(false);
 
       const [anoRes, mesRes, rzRes] = await Promise.all([
-        supabase.from(VIEW_ANOS).select('Ano').range(0, 99999),
-        supabase.from(VIEW_MESES).select('Mes').range(0, 99999),
-        supabase.from(VIEW_RAZOES).select('rz').range(0, 99999)
+        supabase.from(VIEW_ANOS).select('Ano').order('Ano', { ascending: true }),
+        supabase.from(VIEW_MESES).select('Mes'),
+        supabase.from(VIEW_RAZOES).select('rz').order('rz', { ascending: true })
       ]);
 
       if (anoRes.error || mesRes.error || rzRes.error) {
-        const err = anoRes.error || mesRes.error || rzRes.error;
-        if (err?.message.includes('schema cache')) setIsViewMissing(true);
-        throw new Error(err?.message || "Erro nas views materializadas.");
+        throw new Error("Erro ao carregar metadados dos filtros.");
       }
 
-      const anos = Array.from(new Set((anoRes.data || []).map(r => r.Ano?.toString())))
-        .filter((v): v is string => !!v).sort((a, b) => a.localeCompare(b));
+      // Explicitly type mapped results to string and use type guards in filter to ensure correct inference for sort
+      const anos = Array.from(new Set((anoRes.data || []).map((r: any) => String(r.Ano))))
+        .filter((v): v is string => !!v);
 
-      const mesesRaw = (mesRes.data || []).map(r => {
-          const m = (r.Mes as string).trim();
-          return m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
-      });
-      const meses = Array.from(new Set(mesesRaw))
+      const meses = Array.from(new Set((mesRes.data || []).map((r: any) => String(r.Mes))))
         .filter((v): v is string => !!v)
-        .sort((a, b) => (MONTH_ORDER[a.toUpperCase()] || 0) - (MONTH_ORDER[b.toUpperCase()] || 0));
+        .sort((a: string, b: string) => (MONTH_ORDER[a.toUpperCase()] || 0) - (MONTH_ORDER[b.toUpperCase()] || 0));
 
-      const razoes = Array.from(new Set((rzRes.data || []).map(r => r.rz?.toString())))
-        .filter((v): v is string => !!v).sort((a, b) => parseInt(a) - parseInt(b));
+      const razoes = Array.from(new Set((rzRes.data || []).map((r: any) => String(r.rz))))
+        .filter((v): v is string => !!v);
 
       setAvailableFilters({ anos, meses, razoes });
     } catch (err: any) {
@@ -142,38 +170,48 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => { fetchFilters(); }, []);
 
-  const canGenerate = useMemo(() => 
-    selectedFilters.anos.length > 0 && selectedFilters.meses.length > 0 && selectedFilters.razoes.length > 0, 
-    [selectedFilters]
-  );
-
   const handleGenerateReport = async () => {
-    if (!canGenerate) return;
+    if (selectedFilters.anos.length === 0 || selectedFilters.meses.length === 0 || selectedFilters.razoes.length === 0) {
+      setErrorMsg("Selecione pelo menos um valor em cada filtro.");
+      return;
+    }
+    
     try {
       setLoading(true);
       setErrorMsg(null);
       setIsReportGenerated(false);
 
-      const { data: records, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .in('Ano', selectedFilters.anos)
-        .in('Mes', selectedFilters.meses)
-        .in('rz', selectedFilters.razoes)
-        .range(0, 1000000); 
-      
-      if (error) throw error;
-      setDatasetFiltrado(records as LeituraRecord[] || []);
+      const params = {
+        p_anos: selectedFilters.anos,
+        p_meses: selectedFilters.meses,
+        p_razoes: selectedFilters.razoes
+      };
+
+      // Chamada RPC para Indicadores (calculado no backend)
+      const { data: indData, error: indError } = await supabase.rpc('rpc_indicadores_inicio', params);
+      if (indError) throw indError;
+
+      // Chamada RPC para Gráfico
+      const { data: gData, error: gError } = await supabase.rpc('rpc_grafico_mes_a_mes', params);
+      if (gError) throw gError;
+
+      // Chamada RPC para Cards
+      const { data: cData, error: cError } = await supabase.rpc('rpc_cards_por_tipo', params);
+      if (cError) throw cError;
+
+      setIndicators(indData);
+      setChartData(gData || []);
+      setCards(cData || []);
       setIsReportGenerated(true);
     } catch (err: any) {
-      setErrorMsg(err.message);
+      console.error(err);
+      setErrorMsg(err.message || "Erro ao gerar o relatório.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggle = (key: keyof typeof selectedFilters, value: string) => {
-    setIsReportGenerated(false);
     setSelectedFilters(prev => {
       const current = prev[key];
       const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
@@ -181,239 +219,153 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  // CÁLCULOS DETERMINÍSTICOS SOBRE DATASET_FILTRADO
-  const metrics = useMemo(() => {
-    if (!isReportGenerated || datasetFiltrado.length === 0) return null;
-
-    // Definição exata: COUNT(DISTINCT instalacao)
-    const leiturasARealizarSet = new Set(datasetFiltrado.map(r => String(r.instalacao).trim()).filter(Boolean));
-    const leiturasARealizar = leiturasARealizarSet.size;
-
-    // Definição exata: COUNT(DISTINCT instalacao) com nl nos códigos de impedimento
-    const leiturasNaoRealizadasSet = new Set(
-      datasetFiltrado
-        .filter(r => IMPEDIMENTO_CODES.includes(String(r.nl).trim()))
-        .map(r => String(r.instalacao).trim())
-        .filter(Boolean)
-    );
-    const leiturasNaoRealizadas = leiturasNaoRealizadasSet.size;
-
-    // Definição exata: Leituras a Realizar - Leituras Não Realizadas
-    const leiturasRealizadas = leiturasARealizar - leiturasNaoRealizadas;
-
-    // Fórmula exata: (Não Realizadas ÷ a Realizar) × 100
-    const percImpedimentos = leiturasARealizar > 0 ? (leiturasNaoRealizadas / leiturasARealizar) * 100 : 0;
-
-    // Validação Obrigatória
-    if (leiturasRealizadas + leiturasNaoRealizadas !== leiturasARealizar) {
-        console.error("Divergência matemática detectada na lógica de conjuntos.");
-    }
-
-    return { total: leiturasARealizar, nr: leiturasNaoRealizadas, r: leiturasRealizadas, perc: percImpedimentos };
-  }, [datasetFiltrado, isReportGenerated]);
-
-  const chartData = useMemo(() => {
-    if (!isReportGenerated) return [];
-    const map: Record<string, Set<string>> = {};
-    const sortMap: Record<string, number> = {};
-
-    datasetFiltrado.forEach(r => {
-      if (IMPEDIMENTO_CODES.includes(String(r.nl).trim())) {
-        const k = `${r.Mes} ${r.Ano}`;
-        if (!map[k]) {
-            map[k] = new Set();
-            sortMap[k] = (parseInt(String(r.Ano)) * 100) + (MONTH_ORDER[String(r.Mes).toUpperCase()] || 0);
-        }
-        map[k].add(String(r.instalacao).trim());
-      }
-    });
-
-    return Object.entries(map).map(([label, set]) => ({
-      label,
-      value: set.size,
-      sort: sortMap[label]
-    })).sort((a, b) => a.sort - b.sort);
-  }, [datasetFiltrado, isReportGenerated]);
-
-  const tipoGroups = useMemo(() => {
-    if (!isReportGenerated) return [];
-    const groups: Record<string, { totalSet: Set<string>, nrSet: Set<string> }> = {};
-    
-    datasetFiltrado.forEach(r => {
-      const t = r.tipo || 'NÃO INFORMADO';
-      if (!groups[t]) groups[t] = { totalSet: new Set(), nrSet: new Set() };
-      
-      const inst = String(r.instalacao).trim();
-      if (inst) {
-        groups[t].totalSet.add(inst);
-        if (IMPEDIMENTO_CODES.includes(String(r.nl).trim())) {
-          groups[t].nrSet.add(inst);
-        }
-      }
-    });
-
-    return Object.entries(groups).map(([tipo, data]) => {
-      const total = data.totalSet.size;
-      const nr = data.nrSet.size;
-      const r = total - nr;
-      return { tipo, total, nr, r, perc: total > 0 ? (nr / total) * 100 : 0 };
-    });
-  }, [datasetFiltrado, isReportGenerated]);
-
   if (fetchingMetadata) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-6 bg-white rounded-[40px] shadow-2xl border border-slate-50">
-        <div className="h-16 w-16 rounded-full border-4 border-slate-50 border-t-blue-600 animate-spin"></div>
-        <p className="text-slate-400 font-black text-xs uppercase tracking-[0.3em]">Validando Schema da Base...</p>
-      </div>
-    );
-  }
-
-  if (isViewMissing) {
-    return (
-      <div className="max-w-4xl mx-auto py-12 px-6">
-        <div className="bg-white rounded-[40px] shadow-2xl border-2 border-red-50 overflow-hidden">
-          <div className="bg-red-600 p-10 text-white flex items-center gap-6">
-            <AlertCircle size={48} strokeWidth={3} />
-            <div>
-              <h2 className="text-3xl font-black uppercase tracking-tighter">Views Materializadas Requeridas</h2>
-              <p className="text-red-100 font-bold text-sm mt-1 uppercase tracking-widest opacity-80">Correção necessária via SQL Editor</p>
-            </div>
-          </div>
-          <div className="p-10 space-y-8">
-            <div className="bg-slate-900 rounded-3xl p-8">
-              <code className="text-blue-400 text-sm font-mono block break-all">
-                CREATE MATERIALIZED VIEW v_anos AS SELECT DISTINCT "Ano" FROM "LeituraGeral" ORDER BY "Ano" ASC;<br/>
-                CREATE MATERIALIZED VIEW v_meses AS SELECT DISTINCT "Mes" FROM "LeituraGeral";<br/>
-                CREATE MATERIALIZED VIEW v_razoes AS SELECT DISTINCT "rz" FROM "LeituraGeral" ORDER BY "rz" ASC;
-              </code>
-            </div>
-            <button onClick={fetchFilters} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase hover:bg-blue-600 transition-all shadow-xl shadow-slate-200">Revalidar Conexão</button>
-          </div>
-        </div>
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-6">
+        <div className="h-14 w-14 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin"></div>
+        <p className="text-slate-400 font-bold text-xs uppercase tracking-[0.2em]">Conectando à base de dados...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-12 pb-24">
-      {/* FILTROS INTEGRADOS */}
-      <section className="bg-white p-10 rounded-[40px] shadow-2xl border border-slate-100">
-        <div className="flex items-center gap-4 mb-12 border-b border-slate-50 pb-8">
-          <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-100"><Filter size={24} /></div>
-          <div>
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Configuração Analítica</h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Filtros dinâmicos via views materializadas</p>
-          </div>
+    <div className="space-y-12 animate-in fade-in duration-500">
+      {/* SEÇÃO DE FILTROS GLOBAIS */}
+      <section className="bg-white p-10 rounded-[32px] shadow-sm border border-slate-200">
+        <div className="flex items-center gap-3 mb-10 pb-6 border-b border-slate-50">
+          <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Filter size={20} /></div>
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Filtros Operacionais</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-12">
-          <MultiSelectDropdown label="Selecione o Ano:" options={availableFilters.anos} selected={selectedFilters.anos} onToggle={(v) => handleToggle('anos', v)} placeholder="Escolha os Anos" />
-          <MultiSelectDropdown label="Selecione o Mês:" options={availableFilters.meses} selected={selectedFilters.meses} onToggle={(v) => handleToggle('meses', v)} placeholder="Escolha os Meses" />
-          <MultiSelectDropdown label="Selecione o Razão:" options={availableFilters.razoes} selected={selectedFilters.razoes} onToggle={(v) => handleToggle('razoes', v)} placeholder="Escolha as Razões" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <MultiSelectDropdown label="Selecione o Ano" options={availableFilters.anos} selected={selectedFilters.anos} onToggle={(v) => handleToggle('anos', v)} placeholder="Selecione o(s) Ano(s)" />
+          <MultiSelectDropdown label="Selecione o Mês" options={availableFilters.meses} selected={selectedFilters.meses} onToggle={(v) => handleToggle('meses', v)} placeholder="Selecione o(s) Mês(es)" />
+          <MultiSelectDropdown label="Selecione o Razão" options={availableFilters.razoes} selected={selectedFilters.razoes} onToggle={(v) => handleToggle('razoes', v)} placeholder="Selecione a(s) Razão(ões)" />
         </div>
 
-        <div className="flex flex-col items-center border-t border-slate-50 pt-8 gap-4">
+        <div className="mt-12 flex justify-center">
           <button
             onClick={handleGenerateReport}
-            disabled={!canGenerate || loading}
-            className={`flex items-center gap-5 px-24 py-5 rounded-3xl font-black text-2xl transition-all duration-300 ${
-                canGenerate && !loading ? 'bg-slate-900 text-white hover:bg-blue-600 hover:scale-105 active:scale-95 shadow-2xl shadow-slate-200' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+            disabled={loading}
+            className={`flex items-center gap-4 px-16 py-5 rounded-2xl font-black text-lg transition-all shadow-xl ${
+                !loading ? 'bg-slate-900 text-white hover:bg-blue-600 hover:scale-[1.02] active:scale-[0.98]' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             }`}
           >
-            {loading ? <RefreshCw className="animate-spin" size={28} /> : <><Play size={24} fill="currentColor" /> GERAR</>}
+            {loading ? <RefreshCw className="animate-spin" size={24} /> : <><Play size={20} fill="currentColor" /> GERAR RELATÓRIO</>}
           </button>
-          {!canGenerate && <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest bg-amber-50 px-4 py-2 rounded-lg">Preenchimento de filtros obrigatório</p>}
         </div>
+
+        {errorMsg && (
+          <div className="mt-8 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase text-center">
+            {errorMsg}
+          </div>
+        )}
       </section>
 
-      {/* DASHBOARD INTEGRAL */}
-      {isReportGenerated && !loading && metrics && (
-        <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000 space-y-12">
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <IndicatorCard label="Leituras a Realizar" value={metrics.total.toLocaleString()} icon={<FileText size={32} />} color="blue" />
-            <IndicatorCard label="Leituras Não Realizadas" value={metrics.nr.toLocaleString()} icon={<XCircle size={32} />} color="red" />
-            <IndicatorCard label="Leituras Realizadas" value={metrics.r.toLocaleString()} icon={<CheckCircle size={32} />} color="green" />
-            <IndicatorCard label="% de Impedimentos" value={metrics.perc.toFixed(2)} suffix="%" icon={<AlertTriangle size={32} />} color="amber" />
-          </section>
-
-          <section className="bg-white p-12 rounded-[40px] shadow-2xl border border-slate-100">
-            <h3 className="text-slate-900 font-black text-3xl tracking-tighter uppercase mb-12 flex items-center gap-4">
-                <Database size={28} className="text-blue-600" />
-                Curva de Impedimentos (Task Distinct)
-            </h3>
-            <div className="h-[450px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="5 5" vertical={false} stroke="#f8fafc" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 900}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                  <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.1)', fontWeight: 900 }} />
-                  <Bar dataKey="value" name="Impedimentos" fill="#1e293b" radius={[10, 10, 0, 0]} barSize={50} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="mt-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center italic">O somatório dos períodos pode divergir do total se houver instalações repetidas em diferentes seleções.</p>
-          </section>
-
-          <div className="space-y-12">
-            <div className="flex items-center gap-4 text-slate-900 font-black uppercase tracking-tighter border-l-8 border-blue-600 pl-6">
-                <Layout size={28} />
-                <h3 className="text-3xl italic">Performance por Segmentação</h3>
-            </div>
-            {tipoGroups.map((g, idx) => (
-              <div key={idx} className="bg-white p-10 rounded-[40px] shadow-xl border border-slate-100 transition-all hover:scale-[1.01] duration-500">
-                <div className="mb-12 flex items-center justify-between">
-                    <span className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-widest shadow-lg shadow-slate-200">{g.tipo}</span>
-                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-5 py-2 rounded-full border border-blue-100 flex items-center gap-2"><Database size={12}/> DATASET_FILTRADO</div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                  <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Leituras a Realizar</p>
-                    <p className="text-5xl font-black text-slate-900 tracking-tighter">{g.total.toLocaleString()}</p>
-                  </div>
-                  <div className="p-8 bg-red-50 rounded-3xl border border-red-100 text-center">
-                    <p className="text-[10px] font-black text-red-400 uppercase mb-4 tracking-widest">Leituras Não Realizadas</p>
-                    <p className="text-5xl font-black text-red-600 tracking-tighter">{g.nr.toLocaleString()}</p>
-                  </div>
-                  <div className="p-8 bg-green-50 rounded-3xl border border-green-100 text-center">
-                    <p className="text-[10px] font-black text-green-500 uppercase mb-4 tracking-widest">Leituras Realizadas</p>
-                    <p className="text-5xl font-black text-green-700 tracking-tighter">{g.r.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-slate-900 p-8 rounded-[32px] text-white flex flex-col justify-center text-center shadow-2xl">
-                    <p className="text-[11px] font-black text-slate-400 uppercase mb-3 tracking-[0.2em]">% de Impedimentos</p>
-                    <p className="text-6xl font-black tracking-tighter">{g.perc.toFixed(2)}%</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+      {/* ÁREA DE RESULTADOS */}
+      {isReportGenerated && indicators && (
+        <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700">
+          {/* Indicadores de Topo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <IndicatorCard label="Leituras a Realizar" value={indicators.leituras_a_realizar.toLocaleString()} icon={<FileText size={24} />} color="blue" />
+            <IndicatorCard label="Leituras Não Realizadas" value={indicators.leituras_nao_realizadas.toLocaleString()} icon={<XCircle size={24} />} color="red" />
+            <IndicatorCard label="Leituras Realizadas" value={indicators.leituras_realizadas.toLocaleString()} icon={<CheckCircle size={24} />} color="green" />
+            <IndicatorCard label="% Impedimentos" value={indicators.percentual_impedimentos.toFixed(2)} suffix="%" icon={<AlertTriangle size={24} />} color="amber" />
           </div>
+
+          {/* Gráfico Principal */}
+          {chartData.length > 0 && (
+            <section className="bg-white p-10 rounded-[32px] shadow-sm border border-slate-200">
+              <div className="flex items-center justify-between mb-10">
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-3">
+                    <TrendingUp className="text-blue-600" />
+                    Impedimentos Mês a Mês
+                </h3>
+              </div>
+              <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                    <Tooltip 
+                      cursor={{fill: '#f8fafc'}} 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', fontWeight: 'bold' }} 
+                    />
+                    <Bar dataKey="value" name="Impedimentos" fill="#1e293b" radius={[6, 6, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          )}
+
+          {/* Cards por Tipo */}
+          {cards.length > 0 && (
+            <div className="space-y-8">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-1.5 bg-blue-600 rounded-full"></div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Indicadores por Tipo</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-8">
+                {cards.map((card, idx) => (
+                  <div key={idx} className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-200 transition-all hover:border-blue-200">
+                    <div className="mb-8 flex items-center justify-between">
+                      <span className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest">
+                        {card.tipo}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-widest">Leituras</p>
+                        <p className="text-3xl font-black text-slate-900">{card.total.toLocaleString()}</p>
+                      </div>
+                      <div className="p-6 bg-red-50/50 rounded-2xl border border-red-100">
+                        <p className="text-[10px] font-bold text-red-400 uppercase mb-2 tracking-widest">Não Realizadas</p>
+                        <p className="text-3xl font-black text-red-600">{card.nr.toLocaleString()}</p>
+                      </div>
+                      <div className="p-6 bg-green-50/50 rounded-2xl border border-green-100">
+                        <p className="text-[10px] font-bold text-green-500 uppercase mb-2 tracking-widest">Realizadas</p>
+                        <p className="text-3xl font-black text-green-700">{card.r.toLocaleString()}</p>
+                      </div>
+                      <div className="p-6 bg-slate-900 rounded-2xl text-white shadow-xl shadow-slate-200 flex flex-col justify-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-widest">% Impedimento</p>
+                        <p className="text-4xl font-black">{card.perc.toFixed(2)}%</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* TELA EM STAND-BY */}
+      {/* ESTADO INICIAL / VAZIO */}
       {!isReportGenerated && !loading && (
-        <div className="flex flex-col items-center justify-center py-56 bg-white rounded-[40px] border-4 border-dashed border-slate-100 text-center animate-in fade-in duration-700">
-          <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-8 rotate-12">
-            <Layout size={40} className="text-slate-200" />
+        <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[32px] border border-dashed border-slate-200 text-center">
+          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+            <Layout size={32} className="text-slate-300" />
           </div>
-          <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">Aguardando Extração Integral</h3>
-          <p className="text-slate-400 font-bold text-sm mt-3 max-w-sm mx-auto uppercase tracking-widest leading-relaxed">
-            Selecione Ano, Mês e Razão nos filtros acima para iniciar o processamento dos indicadores.
+          <h3 className="text-2xl font-black text-slate-300 uppercase tracking-tighter">Relatório Pronto para Gerar</h3>
+          <p className="text-slate-400 font-medium text-sm mt-3 max-w-xs mx-auto uppercase tracking-widest">
+            Selecione os parâmetros acima para visualizar os indicadores operacionais.
           </p>
         </div>
       )}
 
-      {/* OVERLAY DE PROCESSAMENTO */}
+      {/* LOADER GLOBAL */}
       {loading && (
-        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300">
-            <div className="bg-white p-16 rounded-[60px] shadow-2xl flex flex-col items-center gap-8 border-4 border-blue-600">
-                <div className="relative h-24 w-24">
-                    <div className="absolute inset-0 rounded-full border-8 border-slate-50 border-t-blue-600 animate-spin"></div>
-                    <Database size={32} className="absolute inset-0 m-auto text-blue-600 animate-bounce" />
-                </div>
-                <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Sincronizando Dataset</h2>
-            </div>
+        <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white p-12 rounded-[40px] shadow-2xl flex flex-col items-center gap-6 text-center">
+             <div className="relative h-20 w-20">
+                <div className="absolute inset-0 rounded-full border-4 border-slate-100 border-t-blue-600 animate-spin"></div>
+                <Database size={24} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
+             </div>
+             <div>
+                <h2 className="text-xl font-black text-slate-900 uppercase">Processando Dados</h2>
+                <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest animate-pulse">Consultando 100% da base via RPC...</p>
+             </div>
+          </div>
         </div>
       )}
     </div>

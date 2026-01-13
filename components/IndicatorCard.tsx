@@ -10,24 +10,52 @@ interface IndicatorCardProps {
 }
 
 const IndicatorCard: React.FC<IndicatorCardProps> = ({ label, value, icon, color = 'blue', suffix }) => {
-  const colorMap: Record<string, string> = {
-    blue: 'border-blue-500 text-blue-700 bg-blue-50',
-    red: 'border-red-500 text-red-700 bg-red-50',
-    green: 'border-green-500 text-green-700 bg-green-50',
-    amber: 'border-amber-500 text-amber-700 bg-amber-50',
+  const colorMap: Record<string, { border: string, text: string, bg: string, iconBg: string }> = {
+    blue: { 
+      border: 'border-blue-600', 
+      text: 'text-blue-900', 
+      bg: 'bg-white', 
+      iconBg: 'bg-blue-50 text-blue-600' 
+    },
+    red: { 
+      border: 'border-red-600', 
+      text: 'text-red-900', 
+      bg: 'bg-white', 
+      iconBg: 'bg-red-50 text-red-600' 
+    },
+    green: { 
+      border: 'border-green-600', 
+      text: 'text-green-900', 
+      bg: 'bg-white', 
+      iconBg: 'bg-green-50 text-green-600' 
+    },
+    amber: { 
+      border: 'border-amber-500', 
+      text: 'text-amber-900', 
+      bg: 'bg-white', 
+      iconBg: 'bg-amber-50 text-amber-600' 
+    },
   };
 
+  const currentTheme = colorMap[color] || colorMap.blue;
+
   return (
-    <div className={`rounded-xl border-l-4 bg-white p-6 shadow-sm transition-transform hover:-translate-y-1 ${colorMap[color] || colorMap.blue}`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-slate-800">
-            {value}
-            {suffix && <span className="ml-1 text-lg font-semibold text-slate-500">{suffix}</span>}
-          </p>
+    <div className={`rounded-2xl border-l-4 ${currentTheme.border} ${currentTheme.bg} p-6 shadow-sm border border-slate-200 transition-all hover:shadow-md hover:-translate-y-1`}>
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{label}</p>
+          <div className="flex items-baseline gap-1">
+            <p className={`text-4xl font-black ${currentTheme.text} tracking-tighter`}>
+              {value}
+            </p>
+            {suffix && <span className="text-xl font-bold text-slate-300 uppercase">{suffix}</span>}
+          </div>
         </div>
-        {icon && <div className="text-slate-300">{icon}</div>}
+        {icon && (
+          <div className={`p-3 rounded-xl ${currentTheme.iconBg}`}>
+            {icon}
+          </div>
+        )}
       </div>
     </div>
   );
