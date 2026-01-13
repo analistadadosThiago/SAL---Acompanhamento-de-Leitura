@@ -57,11 +57,6 @@ const App: React.FC = () => {
               Consulta Técnica
             </button>
           </nav>
-
-          {/* Footer */}
-          <div className="border-t p-4">
-            <p className="text-center text-[10px] font-medium text-slate-400 uppercase tracking-widest">© 2024 SAL Monitoring</p>
-          </div>
         </div>
       </aside>
 
@@ -78,13 +73,6 @@ const App: React.FC = () => {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-             <div className="hidden md:flex flex-col items-end mr-1">
-                <span className="text-xs font-bold text-slate-800">Operador SAL</span>
-                <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter flex items-center gap-1">
-                   <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                   Online
-                </span>
-             </div>
              <div className="h-9 w-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-black text-sm border-2 border-white shadow-sm">
                 JD
              </div>

@@ -2,7 +2,7 @@
 export interface LeituraRecord {
   id?: number;
   Ano: number;
-  mes: string;
+  Mes: string;
   rz: string;
   instalacao: string;
   nl: string | number;

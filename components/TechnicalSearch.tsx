@@ -44,7 +44,7 @@ const TechnicalSearch: React.FC = () => {
   const sortedResults = useMemo(() => {
     return [...results].sort((a, b) => {
       if (a.Ano !== b.Ano) return (a.Ano || 0) - (b.Ano || 0);
-      return (MONTH_ORDER[a.mes] || 0) - (MONTH_ORDER[b.mes] || 0);
+      return (MONTH_ORDER[a.Mes] || 0) - (MONTH_ORDER[b.Mes] || 0);
     });
   }, [results]);
 
@@ -59,9 +59,9 @@ const TechnicalSearch: React.FC = () => {
 
   const consumptionChartData = useMemo(() => {
     return sortedResults.map(r => ({
-      label: `${r.mes}/${r.Ano}`,
+      label: `${r.Mes}/${r.Ano}`,
       consumo: r.consumo || 0,
-      timestamp: (r.Ano * 100) + (MONTH_ORDER[r.mes] || 0)
+      timestamp: (r.Ano * 100) + (MONTH_ORDER[r.Mes] || 0)
     }));
   }, [sortedResults]);
 
@@ -153,7 +153,7 @@ const TechnicalSearch: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {sortedResults.map((r, idx) => (
                     <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.mes}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{r.Mes}</td>
                       <td className="px-4 py-3 text-slate-600">{r.Ano}</td>
                       <td className="px-4 py-3 text-slate-500">{r.rz_ul_lv}</td>
                       <td className="px-4 py-3 text-slate-800">{r.instalacao}</td>
