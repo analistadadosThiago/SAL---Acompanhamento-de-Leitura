@@ -17,15 +17,16 @@ const RPC_NAMES = {
   IMPEDIMENTOS_MATR: 'rpc_impedimentos_por_matricula'
 };
 
-interface MultiSelectProps {
+interface DropdownFilterProps {
   label: string;
   options: string[];
-  selected: string[];
+  selected: string | string[] | null;
   onToggle: (value: string) => void;
   placeholder: string;
+  multiple?: boolean;
 }
 
-const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selected, onToggle, placeholder }) => {
+const DropdownFilter: React.FC<DropdownFilterProps> = ({ label, options, selected, onToggle, placeholder, multiple = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -39,6 +40,27 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const isSelected = (option: string) => {
+    if (multiple && Array.isArray(selected)) {
+      return selected.includes(option);
+    }
+    return selected === option;
+  };
+
+  const getSummary = () => {
+    if (multiple && Array.isArray(selected)) {
+      return selected.length > 0 ? `${selected.length} selecionados` : placeholder;
+    }
+    return selected ? String(selected) : placeholder;
+  };
+
+  const getSelectedText = () => {
+    if (multiple && Array.isArray(selected)) {
+      return selected.length > 0 ? selected.join(', ') : 'Todos';
+    }
+    return selected ? String(selected) : 'Todos';
+  };
+
   return (
     <div className="flex flex-col w-full relative" ref={dropdownRef}>
       <div className="mb-2 flex flex-col gap-1">
@@ -47,7 +69,7 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
         </label>
         <div className="text-[10px] font-medium text-blue-600 bg-blue-50/50 px-2 py-1.5 rounded border border-blue-100/50 truncate min-h-[28px] flex items-center">
           <span className="text-slate-400 font-bold mr-1 uppercase">Selecionado:</span>
-          <span className="truncate">{selected.length > 0 ? selected.join(', ') : 'Todos'}</span>
+          <span className="truncate">{getSelectedText()}</span>
         </div>
       </div>
       
@@ -59,7 +81,7 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
         }`}
       >
         <span className="truncate pr-4 text-left font-medium">
-          {selected.length > 0 ? `${selected.length} selecionados` : placeholder}
+          {getSummary()}
         </span>
         <ChevronDown size={16} className={`flex-shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-blue-600' : ''}`} />
       </button>
@@ -67,33 +89,41 @@ const MultiSelectDropdown: React.FC<MultiSelectProps> = ({ label, options, selec
       {isOpen && (
         <div className="absolute top-full left-0 right-0 z-[100] mt-2 bg-white border border-slate-100 rounded-xl shadow-xl max-h-64 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="p-2 overflow-y-auto max-h-64">
-            <div 
-              onClick={() => {
-                if (selected.length === options.length) {
-                  options.forEach(o => onToggle(o));
-                } else {
-                  options.filter(o => !selected.includes(o)).forEach(o => onToggle(o));
-                }
-              }}
-              className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer hover:bg-slate-50 text-blue-600 font-bold text-[10px] uppercase mb-1"
-            >
-              {selected.length === options.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
-            </div>
+            {multiple && (
+              <div 
+                onClick={() => {
+                  if (Array.isArray(selected) && selected.length === options.length) {
+                    options.forEach(o => onToggle(o));
+                  } else {
+                    const toToggle = Array.isArray(selected) 
+                      ? options.filter(o => !selected.includes(o))
+                      : options;
+                    toToggle.forEach(o => onToggle(o));
+                  }
+                }}
+                className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer hover:bg-slate-50 text-blue-600 font-bold text-[10px] uppercase mb-1"
+              >
+                {Array.isArray(selected) && selected.length === options.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+              </div>
+            )}
             {options.map((option) => (
               <div
                 key={option}
-                onClick={() => onToggle(option)}
+                onClick={() => {
+                  onToggle(option);
+                  if (!multiple) setIsOpen(false);
+                }}
                 className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all mb-0.5 ${
-                  selected.includes(option) 
+                  isSelected(option) 
                     ? 'bg-blue-50 text-blue-700 font-semibold' 
                     : 'hover:bg-slate-50 text-slate-600'
                 }`}
               >
                 <span className="text-xs">{option}</span>
                 <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                  selected.includes(option) ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 bg-slate-50'
+                  isSelected(option) ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 bg-slate-50'
                 }`}>
-                  {selected.includes(option) && <Check size={10} strokeWidth={4} />}
+                  {isSelected(option) && <Check size={10} strokeWidth={4} />}
                 </div>
               </div>
             ))}
@@ -126,7 +156,10 @@ const Dashboard: React.FC = () => {
   });
   
   const [selectedFilters, setSelectedFilters] = useState({
-    anos: [] as string[], meses: [] as string[], razoes: [] as string[], matriculas: [] as string[]
+    ano: null as string | null,
+    mes: null as string | null,
+    razoes: [] as string[],
+    matricula: null as string | null
   });
 
   // INITIAL METADATA FETCH
@@ -157,13 +190,12 @@ const Dashboard: React.FC = () => {
     fetchMetadata();
   }, []);
 
-  // DYNAMIC MATRICULA FETCH (Reacts to Ano, Mês, Razão)
+  // DYNAMIC MATRICULA FETCH
   useEffect(() => {
     const fetchMatriculas = async () => {
       try {
-        // Rule: Use only the first value of arrays if multiple selected
-        const p_ano = selectedFilters.anos.length > 0 ? Number(selectedFilters.anos[0]) : null;
-        const p_mes = selectedFilters.meses.length > 0 ? selectedFilters.meses[0] : null;
+        const p_ano = selectedFilters.ano ? Number(selectedFilters.ano) : null;
+        const p_mes = selectedFilters.mes;
         const p_rz = selectedFilters.razoes.length > 0 ? selectedFilters.razoes[0] : null;
 
         let query = supabase.from(TABLE_NAME).select('matr');
@@ -184,7 +216,7 @@ const Dashboard: React.FC = () => {
     };
 
     fetchMatriculas();
-  }, [selectedFilters.anos, selectedFilters.meses, selectedFilters.razoes]);
+  }, [selectedFilters.ano, selectedFilters.mes, selectedFilters.razoes]);
 
   const handleGenerateReport = async () => {
     try {
@@ -192,13 +224,12 @@ const Dashboard: React.FC = () => {
       setErrorMsg(null);
       setIsReportGenerated(false);
 
-      // MANDATORY: Parameters sent to RPCs must ALWAYS be scalar values (first selected item)
-      const p_ano = selectedFilters.anos.length > 0 ? Number(selectedFilters.anos[0]) : null;
-      const p_mes = selectedFilters.meses.length > 0 ? selectedFilters.meses[0] : null;
+      // MANDATORY: SCALAR ONLY FOR RPCS
+      const p_ano = selectedFilters.ano ? Number(selectedFilters.ano) : null;
+      const p_mes = selectedFilters.mes;
       const p_rz = selectedFilters.razoes.length > 0 ? selectedFilters.razoes[0] : null;
-      const p_matr = selectedFilters.matriculas.length > 0 ? selectedFilters.matriculas[0] : null;
+      const p_matr = selectedFilters.matricula;
 
-      // Executing RPCs using strictly scalar parameters
       const [indRes, tipoRes, matrRes] = await Promise.all([
         supabase.rpc(RPC_NAMES.INDICADORES, { p_ano, p_mes, p_rz, p_matr }),
         supabase.rpc(RPC_NAMES.RELACAO_TIPO, { p_ano, p_mes, p_rz, p_matr }),
@@ -212,7 +243,6 @@ const Dashboard: React.FC = () => {
       setIndicators(Array.isArray(indRes.data) ? indRes.data[0] : indRes.data);
       setCardsData(tipoRes.data || []);
       
-      // Formatting and sorting graph data from RPC response (Full dataset, no visual limits)
       const formattedMatrData = (matrRes.data || []).map((item: any) => ({
         matr: String(item.matr),
         percentual: Number(item.percentual_impedimentos || item.percentual || 0),
@@ -229,7 +259,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleToggle = (key: keyof typeof selectedFilters, value: string) => {
+  const handleToggleSingle = (key: 'ano' | 'mes' | 'matricula', value: string) => {
+    setSelectedFilters(prev => ({
+      ...prev,
+      [key]: prev[key] === value ? null : value
+    }));
+  };
+
+  const handleToggleMulti = (key: 'razoes', value: string) => {
     setSelectedFilters(prev => {
       const current = prev[key];
       const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
@@ -249,10 +286,38 @@ const Dashboard: React.FC = () => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MultiSelectDropdown label="Ano" options={availableFilters.anos} selected={selectedFilters.anos} onToggle={(v) => handleToggle('anos', v)} placeholder="Filtrar por Ano" />
-          <MultiSelectDropdown label="Mês" options={availableFilters.meses} selected={selectedFilters.meses} onToggle={(v) => handleToggle('meses', v)} placeholder="Filtrar por Mês" />
-          <MultiSelectDropdown label="Razão" options={availableFilters.razoes} selected={selectedFilters.razoes} onToggle={(v) => handleToggle('razoes', v)} placeholder="Filtrar por Razão" />
-          <MultiSelectDropdown label="Matrícula" options={availableFilters.matriculas} selected={selectedFilters.matriculas} onToggle={(v) => handleToggle('matriculas', v)} placeholder="Filtrar por Matrícula" />
+          <DropdownFilter 
+            label="Ano" 
+            options={availableFilters.anos} 
+            selected={selectedFilters.ano} 
+            onToggle={(v) => handleToggleSingle('ano', v)} 
+            placeholder="Filtrar por Ano" 
+            multiple={false}
+          />
+          <DropdownFilter 
+            label="Mês" 
+            options={availableFilters.meses} 
+            selected={selectedFilters.mes} 
+            onToggle={(v) => handleToggleSingle('mes', v)} 
+            placeholder="Filtrar por Mês" 
+            multiple={false}
+          />
+          <DropdownFilter 
+            label="Razão" 
+            options={availableFilters.razoes} 
+            selected={selectedFilters.razoes} 
+            onToggle={(v) => handleToggleMulti('razoes', v)} 
+            placeholder="Filtrar por Razão" 
+            multiple={true}
+          />
+          <DropdownFilter 
+            label="Matrícula" 
+            options={availableFilters.matriculas} 
+            selected={selectedFilters.matricula} 
+            onToggle={(v) => handleToggleSingle('matricula', v)} 
+            placeholder="Filtrar por Matrícula" 
+            multiple={false}
+          />
         </div>
 
         <div className="mt-8 flex justify-center">
