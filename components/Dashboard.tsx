@@ -5,7 +5,7 @@ import { FilterState } from '../types';
 import IndicatorCard from './IndicatorCard';
 import { TABLE_NAME } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
-import { FileText, XCircle, CheckCircle, AlertTriangle, Filter, Layout, RefreshCw, Play, ChevronDown, Check, Database, TrendingUp, AlertCircle } from 'lucide-react';
+import { FileText, XCircle, CheckCircle, AlertTriangle, Filter, Layout, RefreshCw, Play, ChevronDown, Check, Database, TrendingUp, AlertCircle, Percent } from 'lucide-react';
 
 const VIEW_ANOS = "v_anos";
 const VIEW_MESES = "v_meses";
@@ -135,10 +135,9 @@ const DropdownFilter: React.FC<DropdownFilterProps> = ({ label, options, selecte
 };
 
 interface IndicatorsData {
-  leituras_a_realizar: number;
+  leituras_totais: number;
   leituras_nao_realizadas: number;
   leituras_realizadas: number;
-  percentual_impedimentos: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -164,7 +163,7 @@ const Dashboard: React.FC = () => {
 
   // INITIAL METADATA FETCH
   useEffect(() => {
-    const fetchMetadata = async () => {
+    const fetchInitialMetadata = async () => {
       try {
         setFetchingMetadata(true);
         setErrorMsg(null);
@@ -187,10 +186,10 @@ const Dashboard: React.FC = () => {
         setFetchingMetadata(false);
       }
     };
-    fetchMetadata();
+    fetchInitialMetadata();
   }, []);
 
-  // DYNAMIC MATRICULA FETCH
+  // FILTRO MATRÍCULA - FONTE DE DADOS DIRETA (LeituraGeral)
   useEffect(() => {
     const fetchMatriculas = async () => {
       try {
@@ -198,18 +197,36 @@ const Dashboard: React.FC = () => {
         const p_mes = selectedFilters.mes;
         const p_rz = selectedFilters.razoes.length > 0 ? selectedFilters.razoes[0] : null;
 
-        let query = supabase.from(TABLE_NAME).select('matr');
-        
-        if (p_ano) query = query.eq('Ano', p_ano);
-        if (p_mes) query = query.eq('Mes', p_mes);
-        if (p_rz) query = query.eq('rz', p_rz);
+        let allMatrs: string[] = [];
+        let from = 0;
+        const step = 1000;
+        let hasMore = true;
 
-        const { data, error } = await query.not('matr', 'is', null).order('matr', { ascending: true });
-        
-        if (!error) {
-          const uniqueMatr = Array.from(new Set((data || []).map(r => String(r.matr))));
-          setAvailableFilters(prev => ({ ...prev, matriculas: uniqueMatr }));
+        while (hasMore) {
+          let query = supabase.from(TABLE_NAME).select('matr').range(from, from + step - 1);
+          
+          if (p_ano) query = query.eq('Ano', p_ano);
+          if (p_mes) query = query.eq('Mes', p_mes);
+          if (p_rz) query = query.eq('rz', p_rz);
+
+          const { data, error } = await query.not('matr', 'is', null);
+          
+          if (error) throw error;
+          
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allMatrs = [...allMatrs, ...data.map(r => String(r.matr))];
+            if (data.length < step) {
+              hasMore = false;
+            } else {
+              from += step;
+            }
+          }
         }
+        
+        const uniqueMatr = Array.from(new Set(allMatrs.filter(m => m && m !== 'null'))).sort();
+        setAvailableFilters(prev => ({ ...prev, matriculas: uniqueMatr }));
       } catch (err) {
         console.error("Erro ao carregar matrículas:", err);
       }
@@ -224,7 +241,6 @@ const Dashboard: React.FC = () => {
       setErrorMsg(null);
       setIsReportGenerated(false);
 
-      // MANDATORY: SCALAR ONLY FOR RPCS
       const p_ano = selectedFilters.ano ? Number(selectedFilters.ano) : null;
       const p_mes = selectedFilters.mes;
       const p_rz = selectedFilters.razoes.length > 0 ? selectedFilters.razoes[0] : null;
@@ -240,20 +256,21 @@ const Dashboard: React.FC = () => {
       if (tipoRes.error) throw new Error(`[Relação Tipo] ${tipoRes.error.message}`);
       if (matrRes.error) throw new Error(`[Impedimentos Matrícula] ${matrRes.error.message}`);
 
-      setIndicators(Array.isArray(indRes.data) ? indRes.data[0] : indRes.data);
+      const rawIndData = Array.isArray(indRes.data) ? indRes.data[0] : indRes.data;
+      setIndicators(rawIndData);
       setCardsData(tipoRes.data || []);
       
       const formattedMatrData = (matrRes.data || []).map((item: any) => ({
         matr: String(item.matr),
         percentual: Number(item.percentual_impedimentos || item.percentual || 0),
         qtd_impedimentos: Number(item.leituras_nao_realizadas || item.qtd || 0)
-      })).sort((a: any, b: any) => b.percentual - a.percentual);
+      })).sort((a: any, b: any) => b.qtd_impedimentos - a.qtd_impedimentos);
 
       setGraphData(formattedMatrData);
       setIsReportGenerated(true);
     } catch (err: any) {
-      console.error("RPC Fetching Error:", err);
-      setErrorMsg(err.message || "Erro de conexão ao processar RPCs.");
+      console.error("Erro ao processar relatório:", err);
+      setErrorMsg(err.message || "Erro ao conectar ao banco de dados.");
     } finally {
       setLoading(false);
     }
@@ -272,6 +289,14 @@ const Dashboard: React.FC = () => {
       const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
       return { ...prev, [key]: next };
     });
+  };
+
+  const calculatePercentImpedimentos = () => {
+    if (!indicators) return "0.00";
+    const totais = Number(indicators.leituras_totais) || 0;
+    const naoRealizadas = Number(indicators.leituras_nao_realizadas) || 0;
+    if (totais === 0) return "0.00";
+    return ((naoRealizadas / totais) * 100).toFixed(2);
   };
 
   const tiposObrigatorios = ['Povoado', 'Rural', 'Urbano'];
@@ -349,10 +374,10 @@ const Dashboard: React.FC = () => {
           
           {/* CARDS INDICADORES */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <IndicatorCard label="Leituras a Realizar" value={(indicators.leituras_a_realizar || 0).toLocaleString()} icon={<FileText size={20} />} color="blue" />
+            <IndicatorCard label="Leituras a Realizar" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<FileText size={20} />} color="blue" />
             <IndicatorCard label="Leituras Não Realizadas" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<XCircle size={20} />} color="red" />
             <IndicatorCard label="Leituras Realizadas" value={(indicators.leituras_realizadas || 0).toLocaleString()} icon={<CheckCircle size={20} />} color="green" />
-            <IndicatorCard label="% Impedimentos" value={(indicators.percentual_impedimentos || 0).toFixed(2)} suffix="%" icon={<AlertTriangle size={20} />} color="amber" />
+            <IndicatorCard label="% Impedimentos" value={calculatePercentImpedimentos()} suffix="%" icon={<AlertTriangle size={20} />} color="amber" />
           </div>
 
           {/* GRÁFICO - RELAÇÃO DE IMPEDIMENTOS POR LEITURISTA */}
@@ -362,6 +387,7 @@ const Dashboard: React.FC = () => {
                 <TrendingUp size={18} className="text-blue-600" />
                 Relação de Impedimentos por Leiturista
               </h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Fonte: rpc_impedimentos_por_matricula</p>
             </div>
 
             <div className="h-[500px] w-full mt-4">
@@ -381,17 +407,19 @@ const Dashboard: React.FC = () => {
                   <Tooltip 
                     cursor={{fill: '#f8fafc'}} 
                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '16px' }}
-                    formatter={(value: any) => [`${Number(value).toFixed(2)}%`, 'Taxa de Impedimento']}
+                    formatter={(value: any, name: string) => [
+                        name === 'percentual' ? `${Number(value).toFixed(2)}%` : Number(value).toLocaleString(), 
+                        name === 'percentual' ? 'Taxa de Impedimento' : 'Qtd. Impedimentos'
+                    ]}
                     labelFormatter={(label) => `Matrícula: ${label}`}
                   />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '30px' }} />
                   <Bar dataKey="percentual" name="Taxa de Impedimento (%)" fill="#2563eb" barSize={32} radius={[6, 6, 0, 0]}>
                     <LabelList 
-                      dataKey="percentual" 
+                      dataKey="qtd_impedimentos" 
                       position="top" 
                       offset={10} 
                       style={{ fill: '#1e293b', fontSize: '9px', fontWeight: '900' }} 
-                      formatter={(val: number) => `${val.toFixed(1)}%`}
                     />
                   </Bar>
                 </BarChart>
@@ -399,7 +427,7 @@ const Dashboard: React.FC = () => {
             </div>
           </section>
 
-          {/* RELAÇÃO POR TIPO (CARDS ATUALIZADOS) */}
+          {/* RELAÇÃO POR TIPO */}
           <div className="space-y-8 pt-6">
             <h3 className="text-center text-sm font-black text-slate-900 uppercase tracking-[0.6em]">
               Relação por Tipo:
@@ -413,6 +441,10 @@ const Dashboard: React.FC = () => {
                   leituras_nao_realizadas: 0,
                   leituras_realizadas: 0
                 };
+
+                const tot = Number(card.leituras_totais) || 0;
+                const naoReal = Number(card.leituras_nao_realizadas) || 0;
+                const percImped = tot > 0 ? ((naoReal / tot) * 100).toFixed(2) : "0.00";
                 
                 return (
                   <div key={tipoNome} className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 hover:shadow-xl transition-all relative overflow-hidden group">
@@ -441,6 +473,15 @@ const Dashboard: React.FC = () => {
                       <div className="flex justify-between items-center p-4 bg-green-50 border border-green-100">
                         <p className="text-[10px] font-bold text-green-500 uppercase tracking-wider">Leituras Realizadas</p>
                         <p className="text-xl font-black text-green-700">{(Number(card.leituras_realizadas) || 0).toLocaleString()}</p>
+                      </div>
+
+                      {/* AJUSTE – % IMPEDIMENTOS NA RELAÇÃO POR TIPO */}
+                      <div className="flex justify-between items-center p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                        <div className="flex items-center gap-2">
+                          <Percent size={14} className="text-amber-600" />
+                          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">% Impedimentos</p>
+                        </div>
+                        <p className="text-xl font-black text-amber-700">{percImped}%</p>
                       </div>
                     </div>
                   </div>
