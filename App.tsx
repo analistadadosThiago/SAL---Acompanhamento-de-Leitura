@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { LayoutGrid, Search, Menu as MenuIcon, X, BarChart3, Database, ShieldCheck, Activity } from 'lucide-react';
+import { LayoutGrid, Search, Menu as MenuIcon, X, BarChart3, Database, ShieldCheck, Activity, Users } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
+import LeituristaControl from './components/LeituristaControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -11,15 +12,42 @@ const App: React.FC = () => {
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
+  const renderContent = () => {
+    switch(activeMenu) {
+      case Menu.INICIO: return <Dashboard />;
+      case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
+      case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
+      default: return <Dashboard />;
+    }
+  };
+
+  const getMenuTitle = () => {
+    switch(activeMenu) {
+      case Menu.INICIO: return 'Dashboard Analítico';
+      case Menu.CONSULTA_TECNICA: return 'Consulta';
+      case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
+      default: return 'SAL';
+    }
+  };
+
+  const getMenuSubtitle = () => {
+    switch(activeMenu) {
+      case Menu.INICIO: return 'Monitoramento de Leituristas e Impedimentos';
+      case Menu.CONSULTA_TECNICA: return 'Consulte aqui seus Dados';
+      case Menu.CONTROLE_LEITURISTA: return 'Gestão de Performance e Ocorrências';
+      default: return '';
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
-      {/* Sidebar */}
+      {/* Sidebar - Cor alterada para Preto #000000 conforme solicitação */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-80 bg-[#001529] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-80 bg-[#000000] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex h-full flex-col">
-          {/* Logo Section - SAL Professional Branding */}
+          {/* Logo Section */}
           <div className="flex items-center gap-4 border-b border-white/10 px-6 py-8">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-700 shadow-xl shadow-blue-500/20 flex-shrink-0">
                <Activity size={28} className="text-white" />
@@ -54,7 +82,18 @@ const App: React.FC = () => {
               }`}
             >
               <Search size={20} />
-              Consulta Técnica
+              Consulta
+            </button>
+            <button
+              onClick={() => setActiveMenu(Menu.CONTROLE_LEITURISTA)}
+              className={`flex w-full items-center gap-4 rounded-xl px-5 py-4 text-sm font-semibold transition-all ${
+                activeMenu === Menu.CONTROLE_LEITURISTA 
+                  ? 'bg-blue-600 text-white shadow-lg' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Users size={20} />
+              Controle de Leiturista
             </button>
           </nav>
 
@@ -81,10 +120,10 @@ const App: React.FC = () => {
             </button>
             <div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {activeMenu === Menu.INICIO ? 'Dashboard Analítico' : 'Consulta Técnica'}
+                {getMenuTitle()}
               </h1>
               <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">
-                Monitoramento de Leituristas e Impedimentos
+                {getMenuSubtitle()}
               </p>
             </div>
           </div>
@@ -103,7 +142,7 @@ const App: React.FC = () => {
         {/* Scrollable View Area */}
         <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10">
           <div className="mx-auto max-w-7xl">
-            {activeMenu === Menu.INICIO ? <Dashboard /> : <TechnicalSearch />}
+            {renderContent()}
           </div>
         </div>
       </main>

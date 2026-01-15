@@ -13,7 +13,10 @@
     "@supabase/supabase-js": "^2.90.1",
     "react": "^19.2.3",
     "recharts": "^3.6.0",
-    "lucide-react": "^0.562.0"
+    "lucide-react": "^0.562.0",
+    "xlsx": "0.18.5",
+    "jspdf": "2.5.1",
+    "jspdf-autotable": "3.8.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

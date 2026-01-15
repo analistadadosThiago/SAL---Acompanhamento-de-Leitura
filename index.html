@@ -29,6 +29,91 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
       }
+
+      @media print {
+        @page {
+          size: landscape;
+          margin: 5mm;
+        }
+        
+        aside, header, .print\:hidden, .no-print, nav, aside * {
+          display: none !important;
+        }
+        
+        main {
+          height: auto !important;
+          overflow: visible !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: white !important;
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100% !important;
+        }
+
+        body {
+          background-color: white !important;
+          margin: 0;
+          padding: 0;
+        }
+
+        #root {
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+
+        .mx-auto {
+          max-width: none !important;
+          width: 100% !important;
+          margin: 0 !important;
+        }
+
+        /* Estilo da Tabela para Impressão - Formato Quadrado Profissional */
+        .print-report-only {
+          display: block !important;
+          width: 100% !important;
+          border: 1px solid #000 !important;
+          margin: 0 !important;
+        }
+
+        table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          font-size: 7.5pt !important;
+          table-layout: auto !important;
+        }
+
+        th, td {
+          border: 0.5pt solid #333 !important; 
+          padding: 3pt !important;
+          word-break: break-word !important;
+          text-align: left;
+        }
+
+        thead {
+          display: table-header-group !important;
+          background-color: #f1f5f9 !important;
+          -webkit-print-color-adjust: exact;
+        }
+
+        tr {
+          page-break-inside: avoid !important;
+        }
+
+        .print-hide-extra {
+          display: none !important;
+        }
+
+        .bg-white {
+          box-shadow: none !important;
+          border: none !important;
+        }
+        
+        .lg\:p-10 {
+          padding: 0 !important;
+        }
+      }
     </style>
   <script type="importmap">
 {
@@ -38,7 +123,10 @@
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
     "recharts": "https://esm.sh/recharts@^3.6.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2"
   }
 }
 </script>

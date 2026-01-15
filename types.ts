@@ -21,7 +21,8 @@ export interface LeituraRecord {
 
 export enum Menu {
   INICIO = 'INICIO',
-  CONSULTA_TECNICA = 'CONSULTA_TECNICA'
+  CONSULTA_TECNICA = 'CONSULTA_TECNICA',
+  CONTROLE_LEITURISTA = 'CONTROLE_LEITURISTA'
 }
 
 export interface FilterState {
