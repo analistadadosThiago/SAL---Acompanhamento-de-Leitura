@@ -26,3 +26,4 @@ export const MONTH_ORDER: Record<string, number> = {
 export const SUPABASE_URL = "https://mzguwfuncsmgihzmeqoq.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_7ikVHkk3N6N7uv2-cmSsTg_VMgP9IMO";
 export const TABLE_NAME = "LeituraGeral";
+export const RPC_LEITURISTA_REPORT = "rpc_cl_relatorio_leiturista";
