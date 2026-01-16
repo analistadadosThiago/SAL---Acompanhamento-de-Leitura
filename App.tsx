@@ -4,7 +4,8 @@ import { LayoutGrid, Search, Menu as MenuIcon, X, BarChart3, Database, ShieldChe
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
-import LeituristaControl from './components/LeituristaControl';
+// LeituristaControl importado mas não utilizado para garantir que nenhuma lógica seja executada
+// import LeituristaControl from './components/LeituristaControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -16,7 +17,8 @@ const App: React.FC = () => {
     switch(activeMenu) {
       case Menu.INICIO: return <Dashboard />;
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
-      case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
+      // Caso CONTROLE_LEITURISTA desativado: não renderiza o componente e não executa lógica/RPC
+      case Menu.CONTROLE_LEITURISTA: return <div className="flex flex-col items-center justify-center py-20 text-slate-400 font-bold uppercase tracking-widest">Módulo Inativo</div>;
       default: return <Dashboard />;
     }
   };
@@ -25,7 +27,7 @@ const App: React.FC = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Dashboard Analítico';
       case Menu.CONSULTA_TECNICA: return 'Consulta';
-      case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
+      case Menu.CONTROLE_LEITURISTA: return 'Módulo Inativo';
       default: return 'SAL';
     }
   };
@@ -34,14 +36,14 @@ const App: React.FC = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Monitoramento de Leituristas e Impedimentos';
       case Menu.CONSULTA_TECNICA: return 'Consulte aqui seus Dados';
-      case Menu.CONTROLE_LEITURISTA: return 'Gestão de Performance e Ocorrências';
+      case Menu.CONTROLE_LEITURISTA: return 'Acesso desabilitado pelo administrador';
       default: return '';
     }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
-      {/* Sidebar - Cor alterada para Preto #000000 conforme solicitação */}
+      {/* Sidebar - Cor preta conforme solicitado anteriormente */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-80 bg-[#000000] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -84,6 +86,9 @@ const App: React.FC = () => {
               <Search size={20} />
               Consulta
             </button>
+            
+            {/* O menu "Controle de Leiturista" foi removido da navegação para desativação completa conforme instrução */}
+            {/* 
             <button
               onClick={() => setActiveMenu(Menu.CONTROLE_LEITURISTA)}
               className={`flex w-full items-center gap-4 rounded-xl px-5 py-4 text-sm font-semibold transition-all ${
@@ -95,6 +100,7 @@ const App: React.FC = () => {
               <Users size={20} />
               Controle de Leiturista
             </button>
+            */}
           </nav>
 
           {/* Footer Info */}
