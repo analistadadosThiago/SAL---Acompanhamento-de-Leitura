@@ -17,12 +17,14 @@ export interface LeituraRecord {
   nosb_simulacao: string;
   cna: string;
   tipo: string;
+  foto?: string; // Added for evidence control
 }
 
 export enum Menu {
   INICIO = 'INICIO',
   CONSULTA_TECNICA = 'CONSULTA_TECNICA',
-  CONTROLE_LEITURISTA = 'CONTROLE_LEITURISTA'
+  CONTROLE_LEITURISTA = 'CONTROLE_LEITURISTA',
+  CONTROLE_EVIDENCIAS = 'CONTROLE_EVIDENCIAS'
 }
 
 export interface FilterState {

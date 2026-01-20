@@ -199,7 +199,8 @@ const Dashboard: React.FC = () => {
           razoes: Array.from(new Set((rzRes.data || []).map(r => String(r.rz))))
         }));
       } catch (err: any) {
-        setErrorMsg("Erro ao sincronizar metadados iniciais.");
+        const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+        setErrorMsg("Erro ao sincronizar metadados iniciais: " + msg);
       } finally {
         setFetchingMetadata(false);
       }
@@ -241,8 +242,9 @@ const Dashboard: React.FC = () => {
         
         const uniqueMatr = Array.from(new Set(allMatrs.filter(m => m && m !== 'null'))).sort();
         setAvailableFilters(prev => ({ ...prev, matriculas: uniqueMatr }));
-      } catch (err) {
-        console.error("Erro ao carregar matrículas:", err);
+      } catch (err: any) {
+        const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+        console.error("Erro ao carregar matrículas:", msg);
       }
     };
     fetchMatriculas();
@@ -319,8 +321,8 @@ const Dashboard: React.FC = () => {
       setGraphData(formattedData);
       setIsReportGenerated(true);
     } catch (err: any) {
-      console.error("Erro ao processar relatório:", err);
-      setErrorMsg(err.message || "Erro ao conectar ao banco de dados.");
+      const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -570,7 +572,7 @@ const Dashboard: React.FC = () => {
       {/* OVERLAY DE CARREGAMENTO */}
       {loading && (
         <div className="fixed inset-0 z-[1000] bg-slate-900/80 backdrop-blur-md flex items-center justify-center">
-          <div className="bg-white p-16 rounded-[50px] shadow-2xl flex flex-col items-center gap-8 text-center max-w-sm border border-white/20">
+          <div className="bg-white p-12 rounded-[40px] shadow-2xl flex flex-col items-center gap-8 text-center max-w-sm border border-white/20">
              <div className="relative h-28 w-28">
                 <div className="absolute inset-0 rounded-full border-[8px] border-slate-50 border-t-blue-600 animate-spin"></div>
                 <Database size={40} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />

@@ -1,11 +1,11 @@
 
 import React, { useState } from 'react';
-import { LayoutGrid, Search, Menu as MenuIcon, X, BarChart3, Database, ShieldCheck, Activity, Users } from 'lucide-react';
+import { LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, Activity, Users, Image as ImageIcon } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
-// LeituristaControl importado mas não utilizado para garantir que nenhuma lógica seja executada
-// import LeituristaControl from './components/LeituristaControl';
+import LeituristaControl from './components/LeituristaControl';
+import EvidenceControl from './components/EvidenceControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -17,8 +17,8 @@ const App: React.FC = () => {
     switch(activeMenu) {
       case Menu.INICIO: return <Dashboard />;
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
-      // Caso CONTROLE_LEITURISTA desativado: não renderiza o componente e não executa lógica/RPC
-      case Menu.CONTROLE_LEITURISTA: return <div className="flex flex-col items-center justify-center py-20 text-slate-400 font-bold uppercase tracking-widest">Módulo Inativo</div>;
+      case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
+      case Menu.CONTROLE_EVIDENCIAS: return <EvidenceControl />;
       default: return <Dashboard />;
     }
   };
@@ -26,8 +26,9 @@ const App: React.FC = () => {
   const getMenuTitle = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Dashboard Analítico';
-      case Menu.CONSULTA_TECNICA: return 'Consulta';
-      case Menu.CONTROLE_LEITURISTA: return 'Módulo Inativo';
+      case Menu.CONSULTA_TECNICA: return 'Consulta Técnica';
+      case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
+      case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
       default: return 'SAL';
     }
   };
@@ -35,29 +36,30 @@ const App: React.FC = () => {
   const getMenuSubtitle = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Monitoramento de Leituristas e Impedimentos';
-      case Menu.CONSULTA_TECNICA: return 'Consulte aqui seus Dados';
-      case Menu.CONTROLE_LEITURISTA: return 'Acesso desabilitado pelo administrador';
+      case Menu.CONSULTA_TECNICA: return 'Consulte aqui seus Dados Técnicos';
+      case Menu.CONTROLE_LEITURISTA: return 'Gestão de Produtividade e Impedimentos';
+      case Menu.CONTROLE_EVIDENCIAS: return 'Análise de Fotos e Qualidade de Leitura';
       default: return '';
     }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
-      {/* Sidebar - Cor preta conforme solicitado anteriormente */}
+      {/* Sidebar - Cor preta profissional */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-80 bg-[#000000] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-72 bg-[#000000] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex h-full flex-col">
           {/* Logo Section */}
           <div className="flex items-center gap-4 border-b border-white/10 px-6 py-8">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-700 shadow-xl shadow-blue-500/20 flex-shrink-0">
-               <Activity size={28} className="text-white" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-xl shadow-blue-500/20 flex-shrink-0">
+               <Activity size={24} className="text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight text-white leading-tight uppercase">SAL</span>
-              <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider leading-tight">
-                Sistema de Análise de Leitura
+              <span className="text-xl font-black tracking-tight text-white leading-tight uppercase">SAL</span>
+              <span className="text-[9px] font-bold text-blue-400 uppercase tracking-widest leading-tight">
+                Análise de Leitura
               </span>
             </div>
           </div>
@@ -86,9 +88,6 @@ const App: React.FC = () => {
               <Search size={20} />
               Consulta
             </button>
-            
-            {/* O menu "Controle de Leiturista" foi removido da navegação para desativação completa conforme instrução */}
-            {/* 
             <button
               onClick={() => setActiveMenu(Menu.CONTROLE_LEITURISTA)}
               className={`flex w-full items-center gap-4 rounded-xl px-5 py-4 text-sm font-semibold transition-all ${
@@ -100,7 +99,17 @@ const App: React.FC = () => {
               <Users size={20} />
               Controle de Leiturista
             </button>
-            */}
+            <button
+              onClick={() => setActiveMenu(Menu.CONTROLE_EVIDENCIAS)}
+              className={`flex w-full items-center gap-4 rounded-xl px-5 py-4 text-sm font-semibold transition-all ${
+                activeMenu === Menu.CONTROLE_EVIDENCIAS 
+                  ? 'bg-blue-600 text-white shadow-lg' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <ImageIcon size={20} />
+              Controle de Evidências
+            </button>
           </nav>
 
           {/* Footer Info */}
@@ -108,8 +117,8 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3 text-slate-500 bg-white/5 p-4 rounded-xl">
                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Database Live</span>
-                  <span className="text-[9px] text-slate-500">Supabase Professional</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-tighter">Conexão Ativa</span>
+                  <span className="text-[9px] text-slate-500 uppercase">Supabase Cloud</span>
                </div>
             </div>
           </div>
@@ -128,7 +137,7 @@ const App: React.FC = () => {
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
                 {getMenuTitle()}
               </h1>
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 {getMenuSubtitle()}
               </p>
             </div>
@@ -137,10 +146,10 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
              <div className="text-right hidden sm:block">
                 <p className="text-sm font-bold text-slate-800 flex items-center gap-2 justify-end">
-                   Analista
+                   Analista Master
                    <ShieldCheck size={14} className="text-blue-600" />
                 </p>
-                <p className="text-[10px] font-medium text-slate-400 uppercase">Status: Online</p>
+                <p className="text-[10px] font-medium text-slate-400 uppercase">Sessão Segura</p>
              </div>
           </div>
         </header>

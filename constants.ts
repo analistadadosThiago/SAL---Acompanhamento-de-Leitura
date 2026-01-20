@@ -1,3 +1,4 @@
+
 export const IMPEDIMENTO_CODES = [
   "3201", "3205", "3245", "3301", "3312", "3313", "3369", "3370", "3374", "3379", 
   "3901", "3902", "3903", "3904", "3905", "3906", "3907", "3908", "5101", "5102", 
@@ -7,7 +8,7 @@ export const IMPEDIMENTO_CODES = [
 
 // Lista estrita para o menu Controle de Leiturista
 export const CONTROLE_LEITURISTA_IMPEDIMENTOS = [
-  "3201", "3205", "3245", "3301", "3312", "3313", "3369", "3370", "3374", "3379",
+  "3201", "3205", "3245", "3301", "3312", "3313", "3369", "3370", "3374", "3374",
   "3511", "3601", "3700", "3801", "3830", "3865", "3868", "3871", "3878",
   "3901", "3902", "3903", "3904", "3905", "3906", "3907", "3908",
   "5101", "5102", "5103", "5104", "5105", "5106", "5107", "5108", "5109",
@@ -26,6 +27,16 @@ export const SUPABASE_URL = "https://mzguwfuncsmgihzmeqoq.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_7ikVHkk3N6N7uv2-cmSsTg_VMgP9IMO";
 export const TABLE_NAME = "LeituraGeral";
 
-// RPCs Exclusivas Controle de Leiturista
+// RPCs
 export const RPC_CL_FILTROS = "rpc_cl_filtros_leiturista";
-export const RPC_CL_RELATORIO = "rpc_cl_controle_leiturista_dashboard";
+export const RPC_CL_TABELA_IMPEDIMENTOS = "rpc_controle_leiturista_impedimentos";
+export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impedimentos";
+export const RPC_CE_BASE = "rpc_controle_evidencias_agregado"; 
+export const RPC_CE_FINAL = "rpc_controle_evidencias_v2"; // RPC OFICIAL ATUAL
+export const RPC_CE_V4 = "rpc_evidencias_indicadores_quantitativos_v4"; // NOVA RPC PARA INDICADORES CORRETOS
+
+// RPCs Isoladas para Filtros (Controle de Evidências)
+export const RPC_CE_FILTRO_ANO = "rpc_filtro_ano";
+export const RPC_CE_FILTRO_MES = "rpc_filtro_mes";
+export const RPC_CE_FILTRO_MATR = "rpc_filtro_matr";
+export const RPC_CE_FILTRO_UL = "rpc_filtro_ul";
