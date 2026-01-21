@@ -27,16 +27,16 @@ export const SUPABASE_URL = "https://mzguwfuncsmgihzmeqoq.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_7ikVHkk3N6N7uv2-cmSsTg_VMgP9IMO";
 export const TABLE_NAME = "LeituraGeral";
 
-// RPCs
+// RPCs - NÃO ALTERAR AS EXISTENTES NOS MENUS BLOQUEADOS
 export const RPC_CL_FILTROS = "rpc_cl_filtros_leiturista";
 export const RPC_CL_TABELA_IMPEDIMENTOS = "rpc_controle_leiturista_impedimentos";
 export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impedimentos";
-export const RPC_CE_BASE = "rpc_controle_evidencias_agregado"; 
-export const RPC_CE_FINAL = "rpc_controle_evidencias_v2"; // RPC OFICIAL ATUAL
-export const RPC_CE_V4 = "rpc_evidencias_indicadores_quantitativos_v4"; // NOVA RPC PARA INDICADORES CORRETOS
 
-// RPCs Isoladas para Filtros (Controle de Evidências)
+// RPC OFICIAL PARA AUDITORIA DE EVIDÊNCIAS (REGRA V9)
+export const RPC_CE_TIPO_V9 = "rpc_indicadores_por_tipo_v9";
+
+// RPCs de Filtros Isoladas (OFICIAIS)
 export const RPC_CE_FILTRO_ANO = "rpc_filtro_ano";
 export const RPC_CE_FILTRO_MES = "rpc_filtro_mes";
-export const RPC_CE_FILTRO_MATR = "rpc_filtro_matr";
-export const RPC_CE_FILTRO_UL = "rpc_filtro_ul";
+export const RPC_CE_FILTRO_RZ = "rpc_rz";
+export const RPC_CE_FILTRO_MATRICULA = "rpc_matriculas";
