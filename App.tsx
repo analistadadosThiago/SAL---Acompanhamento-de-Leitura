@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, Activity, Users, Image as ImageIcon } from 'lucide-react';
+import { LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, BarChart3, Activity, Users, Image as ImageIcon, Printer } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
 import LeituristaControl from './components/LeituristaControl';
 import EvidenceControl from './components/EvidenceControl';
+import PrintControl from './components/PrintControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -19,6 +20,7 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
       case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
       case Menu.CONTROLE_EVIDENCIAS: return <EvidenceControl />;
+      case Menu.CONTROLE_IMPRESSAO: return <PrintControl />;
       default: return <Dashboard />;
     }
   };
@@ -29,6 +31,7 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return 'Consulta Operacional';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Produtividade';
       case Menu.CONTROLE_EVIDENCIAS: return 'Auditoria de Evidências';
+      case Menu.CONTROLE_IMPRESSAO: return 'Controle de Impressão';
       default: return 'SAL';
     }
   };
@@ -43,19 +46,19 @@ const App: React.FC = () => {
         <div className="flex h-full flex-col">
           {/* Logo Section */}
           <div className="flex items-center gap-5 border-b border-white/5 px-8 py-10">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-700 shadow-2xl shadow-blue-500/40 flex-shrink-0">
-               <Activity size={30} className="text-white" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 shadow-2xl shadow-blue-500/20 flex-shrink-0 border border-white/10">
+               <BarChart3 size={28} className="text-white" />
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-black tracking-tighter text-white leading-none uppercase italic">SAL</span>
-              <span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.3em] mt-1 leading-none">
-                Analysis System
+              <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest mt-1.5 leading-tight">
+                Sistema de Análise de Leitura
               </span>
             </div>
           </div>
 
           {/* Navigation Menu */}
-          <nav className="flex-1 space-y-2 p-6 mt-6">
+          <nav className="flex-1 space-y-2 p-6 mt-6 overflow-y-auto">
             <button
               onClick={() => setActiveMenu(Menu.INICIO)}
               className={`flex w-full items-center gap-4 rounded-2xl px-6 py-4.5 text-xs font-black uppercase tracking-widest transition-all ${
@@ -87,7 +90,7 @@ const App: React.FC = () => {
               }`}
             >
               <Users size={18} />
-              Produtividade
+              Controle de Leiturista
             </button>
             <button
               onClick={() => setActiveMenu(Menu.CONTROLE_EVIDENCIAS)}
@@ -98,7 +101,18 @@ const App: React.FC = () => {
               }`}
             >
               <ImageIcon size={18} />
-              Auditoria
+              Controle de Evidências
+            </button>
+            <button
+              onClick={() => setActiveMenu(Menu.CONTROLE_IMPRESSAO)}
+              className={`flex w-full items-center gap-4 rounded-2xl px-6 py-4.5 text-xs font-black uppercase tracking-widest transition-all ${
+                activeMenu === Menu.CONTROLE_IMPRESSAO 
+                  ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' 
+                  : 'text-slate-500 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Printer size={18} />
+              Controle de Impressão
             </button>
           </nav>
 

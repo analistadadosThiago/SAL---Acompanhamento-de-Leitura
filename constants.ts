@@ -35,8 +35,18 @@ export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impe
 // RPC OFICIAL PARA AUDITORIA DE EVIDÊNCIAS (REGRA V9)
 export const RPC_CE_TIPO_V9 = "rpc_indicadores_por_tipo_v9";
 
+// NOVAS RPCs SUBMENUS EVIDÊNCIA
+export const RPC_CE_IMPEDIMENTOS = "rpc_ce_impedimentos";
+export const RPC_CE_SIMULACAO_NOSB = "rpc_ce_simulacao_nosb";
+export const RPC_CE_CNA = "rpc_ce_cna";
+export const RPC_CE_QUANTITATIVO = "rpc_ce_quantitativo";
+
 // RPCs de Filtros Isoladas (OFICIAIS)
 export const RPC_CE_FILTRO_ANO = "rpc_filtro_ano";
 export const RPC_CE_FILTRO_MES = "rpc_filtro_mes";
 export const RPC_CE_FILTRO_RZ = "rpc_rz";
 export const RPC_CE_FILTRO_MATRICULA = "rpc_matriculas";
+
+// NOVAS RPCs PARA FILTROS CONTROLE DE IMPRESSÃO (AJUSTE FINAL)
+export const RPC_FILTRO_RAZAO_CI = "rpc_filtro_razao_social_ci";
+export const RPC_FILTRO_MATRICULA_CI = "rpc_filtro_matricula_tecnico_ci";
