@@ -2,14 +2,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
-  TABLE_NAME,
   RPC_CE_FILTRO_ANO,
   RPC_CE_FILTRO_MES,
   RPC_CE_IMPEDIMENTOS,
   RPC_CE_SIMULACAO_NOSB,
   RPC_CE_CNA,
-  RPC_FILTRO_RAZAO_CI,
-  RPC_FILTRO_MATRICULA_CI,
+  RPC_FILTRO_RAZAO_CI_UI,
+  RPC_FILTRO_MATRICULA_CI_UI,
   MONTH_ORDER
 } from '../constants';
 import { 
@@ -41,7 +40,7 @@ interface OptionItem {
 const PrintControl: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState<PrintSubMenu>(PrintSubMenu.NOSB_IMPEDIMENTO);
   
-  // Estados de Filtros Locais e Isolados
+  // Estados de Filtros Locais (Exclusivos do Módulo de Impressão)
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMes, setFilterMes] = useState<string>('');
   const [filterMatr, setFilterMatr] = useState<string>('');
@@ -83,7 +82,7 @@ const PrintControl: React.FC = () => {
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // 1. Carregamento de Metadados Iniciais (Apenas Ano e Mês)
+  // 1. Carregamento de Metadados Iniciais - Isolado para Impressão
   useEffect(() => {
     const fetchBaseMetadata = async () => {
       try {
@@ -92,9 +91,13 @@ const PrintControl: React.FC = () => {
           supabase.rpc(RPC_CE_FILTRO_MES)
         ]);
         
-        const anos = (resAnos.data || []).map((a: any) => String(a.ano || a)).sort((a: any, b: any) => Number(b) - Number(a));
-        const meses = (resMeses.data || []).map((m: any) => {
-          const mVal = String(m.mes || m);
+        const anosList = (resAnos.data || []).map((a: any) => {
+          if (typeof a === 'object') return String(Object.values(a)[0] || '');
+          return String(a);
+        }).filter(Boolean).sort((a: string, b: string) => Number(b) - Number(a));
+
+        const mesesList = (resMeses.data || []).map((m: any) => {
+          const mVal = typeof m === 'object' ? String(Object.values(m)[0] || '') : String(m);
           return { label: mVal.toUpperCase(), value: mVal };
         })
         .filter((m: any) => !!MONTH_ORDER[m.value] || !!MONTH_ORDER[m.value.toUpperCase()])
@@ -104,25 +107,40 @@ const PrintControl: React.FC = () => {
           return m1 - m2;
         });
 
-        setOptions(prev => ({ ...prev, anos, meses }));
+        setOptions(prev => ({ ...prev, anos: anosList, meses: mesesList }));
       } catch (err) {
-        console.error("SAL_ERROR: Erro metadados base:", err);
+        console.error("SAL_ERROR: Falha ao carregar metadados base de impressão.");
       }
     };
     fetchBaseMetadata();
   }, []);
 
-  // 2. Carregamento de Filtros Dependentes (Razão e Técnico) baseados em Ano/Mês
+  // Helper para mapear opções de dropdown de forma segura contra [object Object]
+  const mapToSafeOption = (item: any): OptionItem | null => {
+    if (!item) return null;
+    let val = '';
+    if (typeof item === 'string' || typeof item === 'number') {
+      val = String(item);
+    } else if (typeof item === 'object') {
+      // Tenta chaves conhecidas ou o primeiro valor do objeto
+      val = String(
+        item.rz || item.RZ || item.razao || item.razao_social || 
+        item.matr || item.MATR || item.tecnico || item.matricula ||
+        Object.values(item)[0] || ''
+      );
+    }
+    val = val.trim();
+    if (!val || val === '[object Object]' || val.toLowerCase() === 'null') return null;
+    return { label: val, value: val };
+  };
+
+  // 2. Carregamento de Filtros de UI (Razão e Técnico) - Utilizando RPCs de UI Requisitadas
   useEffect(() => {
     const fetchFiltrosDinamicos = async () => {
-      // Limpa os filtros dependentes sempre que os primários mudam
-      setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
-      setFilterRazao('');
-      setFilterMatr('');
-      setDataset([]);
-      setReportReady(false);
-
-      if (!filterAno || !filterMes) return;
+      if (!filterAno || !filterMes) {
+        setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
+        return;
+      }
       
       setLoadingFilters(true);
       try {
@@ -130,30 +148,16 @@ const PrintControl: React.FC = () => {
         const p_mes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
 
         const [resRz, resMatr] = await Promise.all([
-          supabase.rpc(RPC_FILTRO_RAZAO_CI, { p_ano, p_mes }),
-          supabase.rpc(RPC_FILTRO_MATRICULA_CI, { p_ano, p_mes })
+          supabase.rpc(RPC_FILTRO_RAZAO_CI_UI, { p_ano, p_mes }),
+          supabase.rpc(RPC_FILTRO_MATRICULA_CI_UI, { p_ano, p_mes })
         ]);
 
-        if (resRz.error) throw resRz.error;
-        if (resMatr.error) throw resMatr.error;
+        const rzList = (resRz.data || []).map(mapToSafeOption).filter((o): o is OptionItem => o !== null);
+        const mtList = (resMatr.data || []).map(mapToSafeOption).filter((o): o is OptionItem => o !== null);
 
-        const rzList = (resRz.data || []).map((r: any) => {
-          const val = String(r.rz || r.RZ || r.razao || r.razao_social || r).trim();
-          return { label: val, value: val };
-        }).filter((x: any) => x.value && x.value !== 'null' && x.value !== '');
-
-        const mtList = (resMatr.data || []).map((m: any) => {
-          const val = String(m.matr || m.MATR || m.matricula || m.tecnico || m).trim();
-          return { label: val, value: val };
-        }).filter((x: any) => x.value && x.value !== 'null' && x.value !== '');
-
-        setOptions(prev => ({
-          ...prev,
-          razoes: rzList,
-          matriculas: mtList
-        }));
+        setOptions(prev => ({ ...prev, razoes: rzList, matriculas: mtList }));
       } catch (err) {
-        console.error("SAL_ERROR: Filtros dinâmicos de impressão:", err);
+        console.error("SAL_ERROR: Erro ao carregar filtros de UI para impressão.");
       } finally {
         setLoadingFilters(false);
       }
@@ -161,14 +165,11 @@ const PrintControl: React.FC = () => {
     fetchFiltrosDinamicos();
   }, [filterAno, filterMes]);
 
-  const handleSubMenuChange = (id: PrintSubMenu) => {
-    setActiveSubMenu(id);
-    handleReset(); // Isola completamente o estado ao trocar de submenu
-  };
-
+  // Função EXCLUSIVA de Processamento Local
   const handleProcessarImpressao = async () => {
+    // Validação de segurança local rigorosa
     if (!filterAno || !filterMes) {
-      alert("Selecione o Ano e o Mês de competência para continuar.");
+      alert("Ação Interrompida: Informe o Ano e Mês para processar o dataset.");
       return;
     }
 
@@ -178,10 +179,6 @@ const PrintControl: React.FC = () => {
     try {
       const numAno = Number(filterAno);
       const numMes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
-
-      if (numMes === 0) {
-        throw new Error("Mês inválido selecionado.");
-      }
 
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: numAno,
@@ -193,7 +190,7 @@ const PrintControl: React.FC = () => {
       if (error) throw error;
       const rawData = Array.isArray(data) ? data : [];
 
-      // Filtro de refinamento local para garantir exibição correta
+      // Refinamento local para garantir fidelidade à UI
       const filtered = rawData.filter((r: any) => {
         const rAno = Number(r.Ano || r.ano);
         const rMesRaw = r.Mes || r.mes;
@@ -205,7 +202,8 @@ const PrintControl: React.FC = () => {
           matchMes = rMesRaw === numMes;
         } else {
           const rMesStr = String(rMesRaw).toUpperCase();
-          matchMes = rMesStr === filterMes.toUpperCase();
+          const fMesStr = String(filterMes).toUpperCase();
+          matchMes = rMesStr === fMesStr || rMesStr === String(numMes);
         }
         
         if (!matchAno || !matchMes) return false;
@@ -223,9 +221,8 @@ const PrintControl: React.FC = () => {
       setReportReady(true);
       setCurrentPage(1);
     } catch (err: any) { 
-      console.error("SAL_ERROR: Falha no processamento de impressão:", err);
-      alert("Erro ao sincronizar com o banco de dados. Verifique a conexão.");
-      setDataset([]);
+      console.error("SAL_ERROR: Erro no processamento de impressão:", err);
+      alert("Ocorreu um erro ao carregar os dados de impressão.");
     } finally { 
       setLoading(false); 
     }
@@ -239,7 +236,6 @@ const PrintControl: React.FC = () => {
     setDataset([]);
     setReportReady(false);
     setCurrentPage(1);
-    setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
   };
 
   const paginatedData = useMemo(() => {
@@ -279,8 +275,6 @@ const PrintControl: React.FC = () => {
       .slice(0, 10);
   }, [dataset]);
 
-  const isProcessDisabled = !filterAno || !filterMes || loading;
-
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-40">
       <nav className="bg-white p-2 rounded-2xl flex flex-wrap gap-2 shadow-sm border border-slate-200 no-print">
@@ -290,7 +284,7 @@ const PrintControl: React.FC = () => {
           return (
             <button 
               key={subId} 
-              onClick={() => handleSubMenuChange(subId)} 
+              onClick={() => { setActiveSubMenu(subId); handleReset(); }} 
               className={`flex items-center gap-3 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
                 activeSubMenu === subId 
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
@@ -310,10 +304,6 @@ const PrintControl: React.FC = () => {
             <span className="text-blue-600">·</span>
             <span>{currentConfig.label}</span>
          </h2>
-         <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.5em] mt-4 flex items-center gap-2">
-            <span className="h-1 w-1 rounded-full bg-blue-500"></span>
-            Módulo de Análise e Gestão de Ocorrências Operacionais
-         </p>
       </div>
 
       <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 no-print">
@@ -325,11 +315,7 @@ const PrintControl: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
            <div className="space-y-3">
              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ano</label>
-             <select 
-               value={filterAno} 
-               onChange={e => setFilterAno(e.target.value)} 
-               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all"
-             >
+             <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold">
                <option value="">Selecionar</option>
                {options.anos.map(a => <option key={a} value={a}>{a}</option>)}
              </select>
@@ -337,11 +323,7 @@ const PrintControl: React.FC = () => {
            
            <div className="space-y-3">
              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mês</label>
-             <select 
-               value={filterMes} 
-               onChange={e => setFilterMes(e.target.value)} 
-               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all"
-             >
+             <select value={filterMes} onChange={e => setFilterMes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold">
                <option value="">Selecionar</option>
                {options.meses.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
@@ -352,13 +334,8 @@ const PrintControl: React.FC = () => {
                Razão Social
                {loadingFilters && <Loader2 size={12} className="animate-spin text-blue-600" />}
              </label>
-             <select 
-               disabled={!filterAno || !filterMes || loadingFilters} 
-               value={filterRazao} 
-               onChange={e => setFilterRazao(e.target.value)} 
-               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all disabled:opacity-40"
-             >
-               <option value="">Todas do Período ({options.razoes.length})</option>
+             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold disabled:opacity-40">
+               <option value="">Todas ({options.razoes.length})</option>
                {options.razoes.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
              </select>
            </div>
@@ -368,13 +345,8 @@ const PrintControl: React.FC = () => {
                Técnico
                {loadingFilters && <Loader2 size={12} className="animate-spin text-blue-600" />}
              </label>
-             <select 
-               disabled={!filterAno || !filterMes || loadingFilters} 
-               value={filterMatr} 
-               onChange={e => setFilterMatr(e.target.value)} 
-               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all disabled:opacity-40"
-             >
-               <option value="">Todas do Período ({options.matriculas.length})</option>
+             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold disabled:opacity-40">
+               <option value="">Todos ({options.matriculas.length})</option>
                {options.matriculas.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
            </div>
@@ -383,13 +355,13 @@ const PrintControl: React.FC = () => {
         <div className="mt-12 flex justify-center gap-6">
            <button 
              onClick={handleProcessarImpressao} 
-             disabled={isProcessDisabled} 
-             className="px-20 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/30 flex items-center gap-3 hover:bg-blue-700 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+             disabled={!filterAno || !filterMes || loading} 
+             className="px-20 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center gap-3 hover:bg-blue-700 transition-all disabled:opacity-50"
            >
               {loading ? <Loader2 className="animate-spin" size={18}/> : <Play size={16} fill="currentColor"/>} 
               Executar Análise
            </button>
-           <button onClick={handleReset} className="px-12 py-5 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-colors">
+           <button onClick={handleReset} className="px-12 py-5 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
               <RotateCcw size={14} /> Limpar
            </button>
         </div>
@@ -433,9 +405,9 @@ const PrintControl: React.FC = () => {
                    <List size={22} className="text-blue-500" />
                    Ranking Razão
                  </h3>
-                 <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                     {groupedByRazao.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all group">
+                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                          <div className="flex flex-col gap-1">
                             <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">Nível {i+1}</span>
                             <span className="text-xs font-bold truncate max-w-[150px]">{item.label}</span>
@@ -454,7 +426,7 @@ const PrintControl: React.FC = () => {
               <div className="p-10 border-b border-slate-100 flex items-center justify-between no-print">
                 <div className="flex items-center gap-3">
                   <Layout size={20} className="text-blue-600" />
-                  <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900">Listagem de Registros de Impressão</h3>
+                  <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900">Listagem de Registros</h3>
                 </div>
                 <div className="text-[10px] font-black bg-slate-900 text-white px-5 py-2 rounded-full uppercase tracking-widest">
                   Total: {dataset.length.toLocaleString()}
@@ -490,7 +462,7 @@ const PrintControl: React.FC = () => {
                        ))}
                        {dataset.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-5 py-20 text-center text-slate-400 font-bold uppercase">Nenhum registro localizado para os parâmetros informados</td>
+                          <td colSpan={7} className="px-5 py-20 text-center text-slate-400 font-bold uppercase">Nenhum registro localizado</td>
                         </tr>
                        )}
                     </tbody>
@@ -510,14 +482,14 @@ const PrintControl: React.FC = () => {
 
       {loading && (
         <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center">
-           <div className="bg-white p-20 rounded-[50px] shadow-2xl flex flex-col items-center gap-8">
+           <div className="bg-white p-20 rounded-[50px] shadow-2xl flex flex-col items-center gap-8 text-center">
               <div className="relative h-24 w-24">
                  <div className="absolute inset-0 rounded-full border-[8px] border-slate-100 border-t-blue-600 animate-spin"></div>
                  <Database size={30} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
               </div>
-              <div className="text-center">
+              <div>
                  <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tighter italic">Processando Dataset</h2>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Sincronizando com o Núcleo SAL...</p>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Módulo Local Ativado</p>
               </div>
            </div>
         </div>
