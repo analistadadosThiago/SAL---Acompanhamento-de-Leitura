@@ -1,4 +1,3 @@
-
 export const IMPEDIMENTO_CODES = [
   "3201", "3205", "3245", "3301", "3312", "3313", "3369", "3370", "3374", "3379", 
   "3901", "3902", "3903", "3904", "3905", "3906", "3907", "3908", "5101", "5102", 
@@ -36,9 +35,8 @@ export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impe
 export const RPC_CE_TIPO_V9 = "rpc_indicadores_por_tipo_v9";
 
 // NOVAS RPCs SUBMENUS EVIDÊNCIA
-export const RPC_CE_IMPEDIMENTOS = "rpc_ce_impedimentos";
-export const RPC_CE_SIMULACAO_NOSB = "rpc_ce_simulacao_nosb";
-export const RPC_CE_CNA = "rpc_ce_cna";
+export const RPC_CE_IMPEDIMENTOS = "rpc_controle_impressao_nosb_impedimento";
+export const RPC_CE_SIMULACAO_NOSB = "rpc_controle_impressao_nosb_simulacao";
 export const RPC_CE_QUANTITATIVO = "rpc_ce_quantitativo";
 
 // RPCs de Filtros Isoladas (OFICIAIS)

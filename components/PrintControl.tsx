@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
@@ -6,7 +5,6 @@ import {
   RPC_CE_FILTRO_MES,
   RPC_CE_IMPEDIMENTOS,
   RPC_CE_SIMULACAO_NOSB,
-  RPC_CE_CNA,
   RPC_FILTRO_RAZAO_CI_UI,
   RPC_FILTRO_MATRICULA_CI_UI,
   MONTH_ORDER
@@ -28,8 +26,7 @@ const ITEMS_PER_PAGE = 25;
 
 enum PrintSubMenu {
   NOSB_IMPEDIMENTO = 'NOSB_IMPEDIMENTO',
-  NOSB_SIMULACAO = 'NOSB_SIMULACAO',
-  APRESENTACAO = 'APRESENTACAO'
+  NOSB_SIMULACAO = 'NOSB_SIMULACAO'
 }
 
 interface OptionItem {
@@ -40,7 +37,6 @@ interface OptionItem {
 const PrintControl: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState<PrintSubMenu>(PrintSubMenu.NOSB_IMPEDIMENTO);
   
-  // Estados de Filtros Locais (Exclusivos do Módulo de Impressão)
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMes, setFilterMes] = useState<string>('');
   const [filterMatr, setFilterMatr] = useState<string>('');
@@ -71,18 +67,11 @@ const PrintControl: React.FC = () => {
       icon: <ScanLine size={16}/>,
       motivoKey: 'nosb_simulacao',
       rpc: RPC_CE_SIMULACAO_NOSB
-    },
-    [PrintSubMenu.APRESENTACAO]: {
-      label: 'Apresentação (CNA)',
-      icon: <FileBarChart size={16}/>,
-      motivoKey: 'cna',
-      rpc: RPC_CE_CNA
     }
   };
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // 1. Carregamento de Metadados Iniciais - Isolado para Impressão
   useEffect(() => {
     const fetchBaseMetadata = async () => {
       try {
@@ -109,20 +98,18 @@ const PrintControl: React.FC = () => {
 
         setOptions(prev => ({ ...prev, anos: anosList, meses: mesesList }));
       } catch (err) {
-        console.error("SAL_ERROR: Falha ao carregar metadados base de impressão.");
+        console.error("SAL_ERROR: Falha ao carregar metadados base.");
       }
     };
     fetchBaseMetadata();
   }, []);
 
-  // Helper para mapear opções de dropdown de forma segura contra [object Object]
   const mapToSafeOption = (item: any): OptionItem | null => {
     if (!item) return null;
     let val = '';
     if (typeof item === 'string' || typeof item === 'number') {
       val = String(item);
     } else if (typeof item === 'object') {
-      // Tenta chaves conhecidas ou o primeiro valor do objeto
       val = String(
         item.rz || item.RZ || item.razao || item.razao_social || 
         item.matr || item.MATR || item.tecnico || item.matricula ||
@@ -134,15 +121,19 @@ const PrintControl: React.FC = () => {
     return { label: val, value: val };
   };
 
-  // 2. Carregamento de Filtros de UI (Razão e Técnico) - Utilizando RPCs de UI Requisitadas
   useEffect(() => {
     const fetchFiltrosDinamicos = async () => {
       if (!filterAno || !filterMes) {
         setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
+        setFilterRazao('');
+        setFilterMatr('');
         return;
       }
       
       setLoadingFilters(true);
+      setFilterRazao('');
+      setFilterMatr('');
+
       try {
         const p_ano = Number(filterAno);
         const p_mes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
@@ -157,7 +148,7 @@ const PrintControl: React.FC = () => {
 
         setOptions(prev => ({ ...prev, razoes: rzList, matriculas: mtList }));
       } catch (err) {
-        console.error("SAL_ERROR: Erro ao carregar filtros de UI para impressão.");
+        console.error("SAL_ERROR: Erro ao carregar filtros dependentes.");
       } finally {
         setLoadingFilters(false);
       }
@@ -165,11 +156,9 @@ const PrintControl: React.FC = () => {
     fetchFiltrosDinamicos();
   }, [filterAno, filterMes]);
 
-  // Função EXCLUSIVA de Processamento Local
   const handleProcessarImpressao = async () => {
-    // Validação de segurança local rigorosa
     if (!filterAno || !filterMes) {
-      alert("Ação Interrompida: Informe o Ano e Mês para processar o dataset.");
+      alert("Selecione Ano e Mês para continuar.");
       return;
     }
 
@@ -180,49 +169,27 @@ const PrintControl: React.FC = () => {
       const numAno = Number(filterAno);
       const numMes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
 
+      // AJUSTE OBRIGATÓRIO: Enviando parâmetros exatos da assinatura da RPC para evitar erro PGRST202
+      // Alinhamento conforme solicitação técnica (p_limit ajustado para 10000)
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: numAno,
         p_mes: numMes,
-        p_razao: filterRazao || null,
-        p_tecnico: filterMatr || null
+        p_matr: filterMatr || null,
+        p_rz: filterRazao || null,
+        p_limit: 10000,
+        p_offset: 0,
+        p_motivo: null
       });
+
+      console.log("RETORNO BRUTO RPC IMPRESSÃO:", data);
 
       if (error) throw error;
-      const rawData = Array.isArray(data) ? data : [];
-
-      // Refinamento local para garantir fidelidade à UI
-      const filtered = rawData.filter((r: any) => {
-        const rAno = Number(r.Ano || r.ano);
-        const rMesRaw = r.Mes || r.mes;
-        
-        const matchAno = rAno === numAno;
-        
-        let matchMes = false;
-        if (typeof rMesRaw === 'number') {
-          matchMes = rMesRaw === numMes;
-        } else {
-          const rMesStr = String(rMesRaw).toUpperCase();
-          const fMesStr = String(filterMes).toUpperCase();
-          matchMes = rMesStr === fMesStr || rMesStr === String(numMes);
-        }
-        
-        if (!matchAno || !matchMes) return false;
-
-        const rzVal = String(r.rz || r.RZ || r.razao || '').trim();
-        const matchRz = filterRazao ? (rzVal === filterRazao) : true;
-
-        const matrVal = String(r.matr || r.MATR || '').trim();
-        const matchMatr = filterMatr ? (matrVal === filterMatr) : true;
-
-        return matchRz && matchMatr;
-      });
-
-      setDataset(filtered);
+      setDataset(Array.isArray(data) ? data : []);
       setReportReady(true);
       setCurrentPage(1);
     } catch (err: any) { 
-      console.error("SAL_ERROR: Erro no processamento de impressão:", err);
-      alert("Ocorreu um erro ao carregar os dados de impressão.");
+      console.error("SAL_ERROR: Erro no processamento:", err);
+      alert("Falha ao carregar dados.");
     } finally { 
       setLoading(false); 
     }
@@ -248,20 +215,10 @@ const PrintControl: React.FC = () => {
   const stats = useMemo(() => {
     const total = dataset.length;
     let impressao = 0;
-    let naoImpressao = 0;
-
-    if (activeSubMenu === PrintSubMenu.APRESENTACAO) {
-      dataset.forEach(r => {
-        const val = String(r[currentConfig.motivoKey] || '').toUpperCase();
-        if (val.includes('IMPRESSO') || val.includes('NORMAL')) impressao++;
-        else naoImpressao++;
-      });
-    } else {
-      naoImpressao = total;
-    }
+    let naoImpressao = total;
 
     return { total, impressao, naoImpressao };
-  }, [dataset, activeSubMenu, currentConfig.motivoKey]);
+  }, [dataset]);
 
   const groupedByRazao = useMemo(() => {
     const map: Record<string, number> = {};
@@ -372,11 +329,7 @@ const PrintControl: React.FC = () => {
            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               <IndicatorCard label="Dataset Analisado" value={stats.total.toLocaleString()} icon={<Database size={24}/>} color="blue" />
               <IndicatorCard label="Não Impressão" value={stats.naoImpressao.toLocaleString()} icon={<ShieldAlert size={24}/>} color="red" />
-              {activeSubMenu === PrintSubMenu.APRESENTACAO ? (
-                <IndicatorCard label="Eficiência Impressão" value={stats.impressao.toLocaleString()} icon={<FileBarChart size={24}/>} color="green" />
-              ) : (
-                <IndicatorCard label="Ponto de Atenção" value={((stats.naoImpressao / (stats.total || 1)) * 100).toFixed(2)} suffix="%" icon={<AlertCircle size={24}/>} color="amber" />
-              )}
+              <IndicatorCard label="Ponto de Atenção" value={((stats.naoImpressao / (stats.total || 1)) * 100).toFixed(2)} suffix="%" icon={<AlertCircle size={24}/>} color="amber" />
            </div>
 
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
