@@ -20,7 +20,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const ITEMS_PER_PAGE = 25;
+const ITEMS_PER_PAGE = 20;
 
 const MONTH_MAP: Record<string, number> = {
   "JANEIRO": 1, "FEVEREIRO": 2, "MARÇO": 3, "ABRIL": 4, "MAIO": 5, "JUNHO": 6,
@@ -28,13 +28,11 @@ const MONTH_MAP: Record<string, number> = {
 };
 
 const EvidenceControl: React.FC = () => {
-  // --- Estados de Filtro ---
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMes, setFilterMes] = useState<string>('');
   const [filterMatr, setFilterMatr] = useState<string>('');
   const [filterRazao, setFilterRazao] = useState<string>('');
   
-  // --- Metadados das Opções (Dropdowns) ---
   const [options, setOptions] = useState({
     anos: [] as string[],
     meses: [] as { label: string, value: string }[],
@@ -42,17 +40,14 @@ const EvidenceControl: React.FC = () => {
     matriculas: [] as string[]
   });
 
-  // --- Dataset Principal ---
   const [dataset, setDataset] = useState<any[] | null>(null);
   const [reportReady, setReportReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // --- UI Layout ---
   const [activeTab, setActiveTab] = useState<'leiturista' | 'razao'>('leiturista');
   const [currentPage, setCurrentPage] = useState(1);
   const [chartDimension, setChartDimension] = useState<'mes' | 'matr' | 'razao'>('matr');
-  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchInitialMetadata = async () => {
@@ -81,8 +76,8 @@ const EvidenceControl: React.FC = () => {
   const handleGerarRelatorio = async (isInitial = false) => {
     setLoading(true);
     setErrorMsg(null);
-    setCurrentPage(1);
-
+    // REMOVIDO setReportReady(false) para evitar piscar de tela
+    
     try {
       const p_ano = isInitial ? null : (filterAno ? Number(filterAno) : null);
       const p_mes = isInitial ? "Todos" : (filterMes || "Todos");
@@ -90,9 +85,15 @@ const EvidenceControl: React.FC = () => {
       const { data, error } = await supabase.rpc(RPC_CE_TIPO_V9, { p_ano, p_mes });
       if (error) throw error;
 
-      setDataset(data || []);
+      console.log("SAL_DEBUG: RPC [RPC_CE_TIPO_V9] retorno:", data);
+      const finalData = data || [];
+      
+      console.log("SAL_DEBUG: Atualizando dataset de evidências:", finalData.length);
+      setDataset(finalData);
       setReportReady(true);
+      setCurrentPage(1);
     } catch (err: any) {
+      console.error("Erro RPC Evidências:", err);
       setErrorMsg("Erro ao sincronizar auditoria geral.");
       setDataset([]);
       setReportReady(true);
@@ -116,6 +117,7 @@ const EvidenceControl: React.FC = () => {
     setFilterRazao('');
     setDataset(null);
     setReportReady(false);
+    setCurrentPage(1);
     handleGerarRelatorio(true);
   };
 
@@ -139,33 +141,21 @@ const EvidenceControl: React.FC = () => {
     }).sort((a, b) => a.indicador - b.indicador);
   }, [dataset, filterRazao, filterMatr]);
 
-  const totals = useMemo(() => {
-    const sol = processedData.reduce((acc, c) => acc + (Number(c.solicitadas) || 0), 0);
-    const rea = processedData.reduce((acc, c) => acc + (Number(c.realizadas) || 0), 0);
-    return { sol, rea, pnd: Math.max(0, sol - rea), ind: sol > 0 ? (rea / sol) * 100 : 0 };
-  }, [processedData]);
-
   const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return processedData.slice(start, start + ITEMS_PER_PAGE);
+    const pageSize = ITEMS_PER_PAGE;
+    const start = (currentPage - 1) * pageSize;
+    if (!processedData || processedData.length === 0) return [];
+    return processedData.slice(start, start + pageSize);
   }, [processedData, currentPage]);
 
   const totalPages = Math.max(1, Math.ceil(processedData.length / ITEMS_PER_PAGE));
 
-  const chartData = useMemo(() => {
-    const grouped: Record<string, any> = {};
-    processedData.forEach(item => {
-      let key = chartDimension === 'mes' ? String(item.mes).toUpperCase() : chartDimension === 'matr' ? item.matr_display : item.razao_display;
-      if (!grouped[key]) grouped[key] = { label: key, solicitadas: 0, realizadas: 0, indicador: 0 };
-      grouped[key].solicitadas += Number(item.solicitadas) || 0;
-      grouped[key].realizadas += Number(item.realizadas) || 0;
-    });
-    return Object.values(grouped).map(item => ({
-      ...item,
-      indicador: item.solicitadas > 0 ? (item.realizadas / item.solicitadas) * 100 : 0,
-      pendentes: Math.max(0, item.solicitadas - item.realizadas)
-    })).sort((a, b) => b.solicitadas - a.solicitadas).slice(0, 15);
-  }, [processedData, chartDimension]);
+  const totals = useMemo(() => {
+    const source = processedData;
+    const sol = source.reduce((acc, c) => acc + (Number(c.solicitadas) || 0), 0);
+    const rea = source.reduce((acc, c) => acc + (Number(c.realizadas) || 0), 0);
+    return { sol, rea, pnd: Math.max(0, sol - rea), ind: sol > 0 ? (rea / sol) * 100 : 0 };
+  }, [processedData]);
 
   return (
     <div className="space-y-10 pb-40">
@@ -268,6 +258,11 @@ const EvidenceControl: React.FC = () => {
                             <td className="px-6 py-4 border border-slate-200 text-center font-black">{row.indicador.toFixed(2).replace('.', ',')}%</td>
                          </tr>
                       ))}
+                      {processedData.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-20 text-center text-slate-400 font-bold uppercase tracking-widest">Nenhum registro encontrado</td>
+                        </tr>
+                      )}
                    </tbody>
                 </table>
              </div>
@@ -275,7 +270,7 @@ const EvidenceControl: React.FC = () => {
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</span>
                 <div className="flex gap-2">
                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-3 bg-white border rounded-xl disabled:opacity-30"><ChevronLeft size={16} /></button>
-                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-3 bg-white border rounded-xl disabled:opacity-30"><ChevronRight size={16} /></button>
+                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-3 bg-white border rounded-xl disabled:opacity-30"><ChevronRight size={16} /></button>
                 </div>
              </div>
           </section>

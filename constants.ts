@@ -50,3 +50,7 @@ export const RPC_CE_FILTRO_MATRICULA = "rpc_matriculas";
 // NOVAS RPCs PARA FILTROS CONTROLE DE IMPRESSÃO (AJUSTE FINAL)
 export const RPC_FILTRO_RAZAO_CI = "rpc_filtro_razao_social_ci";
 export const RPC_FILTRO_MATRICULA_CI = "rpc_filtro_matricula_tecnico_ci";
+
+// RPCs EXCLUSIVAS PARA UI (REQUISITO AJUSTE FINAL)
+export const RPC_FILTRO_RAZAO_CI_UI = "rpc_filtro_razao_social_ci_ui";
+export const RPC_FILTRO_MATRICULA_CI_UI = "rpc_filtro_matricula_tecnico_ci_ui";
