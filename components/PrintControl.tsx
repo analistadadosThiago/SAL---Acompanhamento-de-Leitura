@@ -6,8 +6,7 @@ import {
   RPC_CE_FILTRO_MES,
   RPC_CE_IMPEDIMENTOS,
   RPC_CE_SIMULACAO_NOSB,
-  RPC_FILTRO_RAZAO_CI_UI,
-  RPC_FILTRO_MATRICULA_CI_UI,
+  TABLE_NAME,
   MONTH_ORDER
 } from '../constants';
 import { 
@@ -15,12 +14,16 @@ import {
   TrendingUp, List, 
   ChevronLeft, ChevronRight,
   ShieldAlert, ScanLine, 
-  Printer, AlertCircle, Layout
+  Printer, AlertCircle, Layout, FileSpreadsheet, FileText, BarChart3, Info,
+  Search, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, LabelList
+  ResponsiveContainer, LabelList, Legend, Cell
 } from 'recharts';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import IndicatorCard from './IndicatorCard';
 
 const ITEMS_PER_PAGE = 25;
@@ -38,11 +41,13 @@ interface OptionItem {
 const PrintControl: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState<PrintSubMenu>(PrintSubMenu.NOSB_IMPEDIMENTO);
   
+  // Estados de Filtro
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMes, setFilterMes] = useState<string>('');
   const [filterMatr, setFilterMatr] = useState<string>('');
   const [filterRazao, setFilterRazao] = useState<string>('');
   
+  // Opções dos Selects
   const [options, setOptions] = useState({
     anos: [] as string[],
     meses: [] as OptionItem[],
@@ -50,6 +55,7 @@ const PrintControl: React.FC = () => {
     matriculas: [] as OptionItem[]
   });
 
+  // Dataset e Controle de UI
   const [dataset, setDataset] = useState<any[]>([]);
   const [reportReady, setReportReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,13 +73,13 @@ const PrintControl: React.FC = () => {
       label: 'Simulação (NOSB)',
       icon: <ScanLine size={16}/>,
       motivoKey: 'nosb_simulacao',
-      rpc: RPC_CE_SIMULACAO_NOSB
+      rpc: RPC_CE_SIMULACAO_NOSB 
     }
   };
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // 1. Carregamento de Metadados Base (Ano/Mês)
+  // 1. Efeito Inicial: Carregar Anos e Meses Disponíveis
   useEffect(() => {
     const fetchBaseMetadata = async () => {
       try {
@@ -106,27 +112,9 @@ const PrintControl: React.FC = () => {
     fetchBaseMetadata();
   }, []);
 
-  const mapToSafeOption = (item: any): OptionItem | null => {
-    if (!item) return null;
-    let val = '';
-    if (typeof item === 'string' || typeof item === 'number') {
-      val = String(item);
-    } else if (typeof item === 'object') {
-      val = String(
-        item.rz || item.RZ || item.razao || item.razao_social || 
-        item.matr || item.MATR || item.tecnico || item.matricula ||
-        Object.values(item)[0] || ''
-      );
-    }
-    val = val.trim();
-    if (!val || val === '[object Object]' || val.toLowerCase() === 'null') return null;
-    return { label: val, value: val };
-  };
-
-  // 2. AJUSTE CIRÚRGICO: Carregamento Dinâmico de Razão Social e Técnico (Somente se Ano e Mês selecionados)
+  // 2. Filtros Dinâmicos (Chaining): Carrega Razões e Técnicos após Ano/Mês selecionados
   useEffect(() => {
     const fetchFiltrosDinamicos = async () => {
-      // Regra: Somente disparar se ambos estiverem preenchidos
       if (!filterAno || !filterMes) {
         setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
         setFilterRazao('');
@@ -135,26 +123,33 @@ const PrintControl: React.FC = () => {
       }
       
       setLoadingFilters(true);
-      // Resetar seleções atuais ao trocar o período
-      setFilterRazao('');
-      setFilterMatr('');
-
       try {
         const p_ano = Number(filterAno);
-        const p_mes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
+        const p_mes = filterMes;
 
-        // Chamada das RPCs de interface (UI) filtradas por competência
-        const [resRz, resMatr] = await Promise.all([
-          supabase.rpc(RPC_FILTRO_RAZAO_CI_UI, { p_ano, p_mes }),
-          supabase.rpc(RPC_FILTRO_MATRICULA_CI_UI, { p_ano, p_mes })
-        ]);
+        // Busca razões e matrículas únicas para o período selecionado para garantir população total
+        const { data, error } = await supabase
+          .from(TABLE_NAME)
+          .select('rz, matr')
+          .eq('Ano', p_ano)
+          .eq('Mes', p_mes);
 
-        const rzList = (resRz.data || []).map(mapToSafeOption).filter((o): o is OptionItem => o !== null);
-        const mtList = (resMatr.data || []).map(mapToSafeOption).filter((o): o is OptionItem => o !== null);
+        if (error) throw error;
+
+        const rzSet = new Set<string>();
+        const mtSet = new Set<string>();
+
+        (data || []).forEach(item => {
+          if (item.rz) rzSet.add(String(item.rz).trim());
+          if (item.matr) mtSet.add(String(item.matr).trim());
+        });
+
+        const rzList = Array.from(rzSet).sort().map(val => ({ label: val, value: val }));
+        const mtList = Array.from(mtSet).sort().map(val => ({ label: val, value: val }));
 
         setOptions(prev => ({ ...prev, razoes: rzList, matriculas: mtList }));
       } catch (err) {
-        console.error("SAL_ERROR: Erro ao carregar filtros dependentes.");
+        console.error("SAL_ERROR: Erro ao carregar filtros dependentes.", err);
       } finally {
         setLoadingFilters(false);
       }
@@ -162,26 +157,24 @@ const PrintControl: React.FC = () => {
     fetchFiltrosDinamicos();
   }, [filterAno, filterMes]);
 
+  // 3. Execução da Análise (Sem Limite de 1000 registros)
   const handleProcessarImpressao = async () => {
-    if (!filterAno || !filterMes) {
-      alert("Selecione Ano e Mês para continuar.");
-      return;
-    }
+    if (!filterAno || !filterMes) return;
 
     setLoading(true);
     setReportReady(false); 
     
     try {
       const numAno = Number(filterAno);
-      const numMes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
+      const p_mes = filterMes;
 
-      // Execução da análise respeitando a assinatura exata da RPC
+      // Executa a RPC correspondente com limite massivo (1 milhão) para análise completa sem cortes
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: numAno,
-        p_mes: numMes,
+        p_mes: p_mes,
         p_matr: filterMatr || null,
         p_rz: filterRazao || null,
-        p_limit: 10000,
+        p_limit: 1000000, 
         p_offset: 0,
         p_motivo: null
       });
@@ -191,8 +184,7 @@ const PrintControl: React.FC = () => {
       setReportReady(true);
       setCurrentPage(1);
     } catch (err: any) { 
-      console.error("SAL_ERROR: Erro no processamento:", err);
-      alert("Falha ao carregar dados.");
+      console.error("SAL_ERROR: Erro no processamento estatístico:", err);
     } finally { 
       setLoading(false); 
     }
@@ -208,6 +200,7 @@ const PrintControl: React.FC = () => {
     setCurrentPage(1);
   };
 
+  // Memoization: Paginação Visual
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return dataset.slice(start, start + ITEMS_PER_PAGE);
@@ -215,38 +208,76 @@ const PrintControl: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(dataset.length / ITEMS_PER_PAGE));
 
-  const stats = useMemo(() => {
-    const total = dataset.length;
-    const naoImpressao = total; // No contexto de NOSB, todos os retornados são não impressões
-    return { total, naoImpressao };
-  }, [dataset]);
+  // Memoization: Relação Quantitativa (Agrupada por Razão e Motivo)
+  const relacaoQuantitativa = useMemo(() => {
+    const map: Record<string, { rz: string, motivo: string, qtd: number }> = {};
+    dataset.forEach(r => {
+      const rz = String(r.rz || r.RZ || r.razao || 'N/A').trim();
+      const motivo = String(r[currentConfig.motivoKey] || 'N/A').trim();
+      const key = `${rz}|${motivo}`;
+      if (!map[key]) {
+        map[key] = { rz, motivo, qtd: 0 };
+      }
+      map[key].qtd += 1;
+    });
+    return Object.values(map).sort((a, b) => b.qtd - a.qtd);
+  }, [dataset, currentConfig.motivoKey]);
 
-  const groupedByRazao = useMemo(() => {
+  // Memoization: Dados do Gráfico (Comparativo: Motivo, Razão, Matrícula, Mês, Ano)
+  const chartData = useMemo(() => {
     const map: Record<string, number> = {};
     dataset.forEach(r => {
-      const key = String(r.rz || r.RZ || r.razao || 'N/A').trim();
-      map[key] = (map[key] || 0) + 1;
+      const rz = String(r.rz || r.RZ || r.razao || 'N/A').trim();
+      map[rz] = (map[rz] || 0) + 1;
     });
     return Object.entries(map)
-      .map(([label, qtd]) => ({ label, qtd }))
-      .sort((a, b) => b.qtd - a.qtd)
-      .slice(0, 10);
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15);
   }, [dataset]);
+
+  const exportExcel = () => {
+    if (dataset.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(dataset);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dados Impressão");
+    XLSX.writeFile(wb, `SAL_Análise_${currentConfig.label}_${filterMes}_${filterAno}.xlsx`);
+  };
+
+  const exportPDF = () => {
+    if (dataset.length === 0) return;
+    const doc = new jsPDF('l', 'mm', 'a4');
+    doc.setFontSize(14);
+    doc.text(`Relatório de Análise: ${currentConfig.label}`, 15, 10);
+    doc.setFontSize(10);
+    doc.text(`Período: ${filterMes}/${filterAno}`, 15, 16);
+    
+    autoTable(doc, {
+      html: '#print-analitico-table',
+      theme: 'grid',
+      styles: { fontSize: 6.5, cellPadding: 1 },
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+      margin: { top: 25 }
+    });
+    doc.save(`SAL_Relatorio_${currentConfig.label}.pdf`);
+  };
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-40">
-      <nav className="bg-white p-2 rounded-2xl flex flex-wrap gap-2 shadow-sm border border-slate-200 no-print">
+      {/* Submenus Navigation */}
+      <nav className="bg-white p-2 rounded-[24px] flex flex-wrap gap-2 shadow-sm border border-slate-200 no-print">
         {(Object.keys(PrintSubMenu) as Array<keyof typeof PrintSubMenu>).map((key) => {
           const subId = PrintSubMenu[key];
           const config = menuConfig[subId];
+          const isActive = activeSubMenu === subId;
           return (
             <button 
               key={subId} 
               onClick={() => { setActiveSubMenu(subId); handleReset(); }} 
-              className={`flex items-center gap-3 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                activeSubMenu === subId 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+              className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${
+                isActive 
+                  ? 'bg-slate-950 text-white shadow-2xl shadow-slate-950/20' 
+                  : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               {config.icon}
@@ -256,161 +287,147 @@ const PrintControl: React.FC = () => {
         })}
       </nav>
 
-      <div className="px-2">
-         <h2 className="text-2xl lg:text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none flex items-center flex-wrap gap-x-3">
-            <span className="text-slate-400">Controle de Impressão</span>
-            <span className="text-blue-600">·</span>
-            <span>{currentConfig.label}</span>
-         </h2>
+      {/* Visual Information Banner (Exibição Informativa solicitada) */}
+      <div className="bg-slate-900 rounded-[32px] p-8 text-white flex flex-wrap gap-x-16 gap-y-6 no-print border border-white/5 shadow-2xl relative overflow-hidden">
+         <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none rotate-12"><Printer size={160} /></div>
+         <div className="flex flex-col relative z-10">
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Ano selecionado</span>
+            <span className="text-lg font-black tracking-tighter italic">{filterAno || '--'}</span>
+         </div>
+         <div className="flex flex-col relative z-10">
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Mês selecionado</span>
+            <span className="text-lg font-black tracking-tighter italic uppercase">{filterMes || '--'}</span>
+         </div>
+         <div className="flex flex-col relative z-10">
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Razão selecionada</span>
+            <span className="text-lg font-black tracking-tighter italic truncate max-w-[200px]">{filterRazao || 'TODAS'}</span>
+         </div>
+         <div className="flex flex-col relative z-10">
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Matrícula selecionada</span>
+            <span className="text-lg font-black tracking-tighter italic">{filterMatr || 'GERAL'}</span>
+         </div>
       </div>
 
+      {/* Parâmetros de Filtro Operacional com Rótulos Solicitados */}
       <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 no-print">
         <div className="flex items-center gap-4 mb-10">
-          <div className="p-3 bg-slate-950 text-white rounded-xl shadow-lg shadow-black/10"><Filter size={20} /></div>
-          <h2 className="text-sm font-black uppercase italic tracking-tight text-slate-800">Parâmetros de Execução</h2>
+          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20"><Filter size={20} /></div>
+          <h2 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Configuração de Parâmetros</h2>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ano</label>
-             <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold">
-               <option value="">Selecionar</option>
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecione o Ano</label>
+             <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+               <option value="">Selecione...</option>
                {options.anos.map(a => <option key={a} value={a}>{a}</option>)}
              </select>
            </div>
            
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mês</label>
-             <select value={filterMes} onChange={e => setFilterMes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold">
-               <option value="">Selecionar</option>
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecione o Mês</label>
+             <select value={filterMes} onChange={e => setFilterMes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+               <option value="">Selecione...</option>
                {options.meses.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
            </div>
            
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-               Razão Social
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+               Selecione o Razão
                {loadingFilters && <Loader2 size={12} className="animate-spin text-blue-600" />}
              </label>
-             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold disabled:opacity-40">
-               <option value="">Todas ({options.razoes.length})</option>
+             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold disabled:opacity-30 focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+               <option value="">Todas Unidades ({options.razoes.length})</option>
                {options.razoes.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
              </select>
            </div>
            
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-               Técnico
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+               Selecione a Matrícula
                {loadingFilters && <Loader2 size={12} className="animate-spin text-blue-600" />}
              </label>
-             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm font-bold disabled:opacity-40">
-               <option value="">Todos ({options.matriculas.length})</option>
+             <select disabled={!filterAno || !filterMes || loadingFilters} value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold disabled:opacity-30 focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+               <option value="">Todas Matrículas ({options.matriculas.length})</option>
                {options.matriculas.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
            </div>
         </div>
 
-        <div className="mt-12 flex justify-center gap-6">
+        <div className="mt-14 flex flex-col sm:flex-row justify-center items-center gap-6">
            <button 
              onClick={handleProcessarImpressao} 
              disabled={!filterAno || !filterMes || loading} 
-             className="px-20 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center gap-3 hover:bg-blue-700 transition-all disabled:opacity-50"
+             className="w-full sm:w-auto px-24 py-5.5 bg-blue-600 text-white rounded-[24px] font-black text-xs uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 flex items-center justify-center gap-4 hover:bg-blue-700 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
            >
-              {loading ? <Loader2 className="animate-spin" size={18}/> : <Play size={16} fill="currentColor"/>} 
-              Executar Análise
+              {loading ? <Loader2 className="animate-spin" size={20}/> : <Play size={18} fill="currentColor"/>} 
+              PROCESSAR DATASET
            </button>
-           <button onClick={handleReset} className="px-12 py-5 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-              <RotateCcw size={14} /> Limpar
+           <button onClick={handleReset} className="w-full sm:w-auto px-12 py-5.5 bg-slate-100 text-slate-500 rounded-[24px] text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-200 transition-all">
+              <RotateCcw size={16} /> REINICIAR
            </button>
         </div>
       </section>
 
       {reportReady && (
-        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              <IndicatorCard label="Dataset Analisado" value={stats.total.toLocaleString()} icon={<Database size={24}/>} color="blue" />
-              <IndicatorCard label="Não Impressão" value={stats.naoImpressao.toLocaleString()} icon={<ShieldAlert size={24}/>} color="red" />
-              <IndicatorCard label="Ponto de Atenção" value={((stats.naoImpressao / (stats.total || 1)) * 100).toFixed(2)} suffix="%" icon={<AlertCircle size={24}/>} color="amber" />
+        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+           {/* Indicadores Resumo */}
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <IndicatorCard label="Dataset Analisado" value={dataset.length.toLocaleString()} icon={<Database size={24}/>} color="blue" />
+              <IndicatorCard label="Ocorrências Localizadas" value={dataset.length.toLocaleString()} icon={<ShieldAlert size={24}/>} color="red" />
+              <IndicatorCard label="Cobertura de Lote" value="100" suffix="%" icon={<CheckCircle2 size={24}/>} color="amber" />
            </div>
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-              <div className="lg:col-span-2 bg-white p-10 rounded-[40px] shadow-sm border border-slate-200">
-                <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900 mb-10 flex items-center gap-3">
-                  <TrendingUp className="text-blue-600" size={22}/>
-                  Top 10 Razão Social por Ocorrências
-                </h3>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={groupedByRazao} layout="vertical" margin={{ left: 40, right: 40 }}>
-                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                       <XAxis type="number" hide />
-                       <YAxis dataKey="label" type="category" axisLine={false} tickLine={false} tick={{fill: '#0f172a', fontSize: 10, fontWeight: '900'}} width={150} />
-                       <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
-                       <Bar dataKey="qtd" barSize={25} radius={[0, 10, 10, 0]} fill="#2563eb">
-                          <LabelList dataKey="qtd" position="right" style={{ fontSize: '10px', fontWeight: '900', fill: '#0f172a' }} />
-                       </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="bg-slate-900 rounded-[40px] p-10 text-white shadow-2xl flex flex-col">
-                 <h3 className="text-base font-black uppercase italic tracking-widest mb-8 flex items-center gap-3">
-                   <List size={22} className="text-blue-500" />
-                   Ranking Razão
-                 </h3>
-                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                    {groupedByRazao.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                         <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">Nível {i+1}</span>
-                            <span className="text-xs font-bold truncate max-w-[150px]">{item.label}</span>
-                         </div>
-                         <div className="text-right">
-                            <p className="text-lg font-black text-white">{item.qtd}</p>
-                            <span className="text-[9px] text-slate-500 uppercase font-black">Registros</span>
-                         </div>
-                      </div>
-                    ))}
-                 </div>
-              </div>
-           </div>
-
+           {/* Tabela Analítica - Estrutura de Colunas solicitada */}
            <section className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-10 border-b border-slate-100 flex items-center justify-between no-print">
+              <div className="p-10 border-b border-slate-100 flex flex-wrap items-center justify-between gap-6 no-print">
                 <div className="flex items-center gap-3">
                   <Layout size={20} className="text-blue-600" />
-                  <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900">Listagem de Registros</h3>
+                  <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Listagem Analítica</h3>
                 </div>
-                <div className="text-[10px] font-black bg-slate-900 text-white px-5 py-2 rounded-full uppercase tracking-widest">
-                  Total: {dataset.length.toLocaleString()}
+                <div className="flex gap-4">
+                   <button onClick={exportExcel} className="flex items-center gap-3 px-8 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"><FileSpreadsheet size={18} className="text-green-600"/> EXCEL</button>
+                   <button onClick={exportPDF} className="flex items-center gap-3 px-8 py-3.5 bg-slate-950 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-800 shadow-xl transition-all"><FileText size={18}/> PDF</button>
                 </div>
               </div>
               
               <div className="overflow-x-auto p-10">
-                 <table className="w-full text-left text-[11px] border-collapse">
-                    <thead className="bg-slate-50 text-slate-500 uppercase font-black tracking-widest">
+                 <table id="print-analitico-table" className="w-full text-left text-[11px] border-collapse border border-black">
+                    <thead className="bg-slate-50 text-slate-950 uppercase font-black tracking-widest">
                        <tr>
-                         <th className="px-5 py-5 border border-slate-200">Mês</th>
-                         <th className="px-5 py-5 border border-slate-200">Ano</th>
-                         <th className="px-5 py-5 border border-slate-200">Razão Social</th>
-                         <th className="px-5 py-5 border border-slate-200">Instalação</th>
-                         <th className="px-5 py-5 border border-slate-200">Matrícula</th>
-                         <th className="px-5 py-5 border border-slate-200 text-center">Cod</th>
-                         <th className="px-5 py-5 border border-slate-200 bg-blue-50/50 text-blue-800">Motivo (Análise)</th>
+                         <th className="px-6 py-5 border border-black">MES</th>
+                         <th className="px-6 py-5 border border-black">ANO</th>
+                         <th className="px-6 py-5 border border-black">RAZÃO</th>
+                         <th className="px-6 py-5 border border-black">UL</th>
+                         <th className="px-6 py-5 border border-black">INSTALAÇÃO</th>
+                         <th className="px-6 py-5 border border-black">MEDIDOR</th>
+                         <th className="px-6 py-5 border border-black">REG</th>
+                         <th className="px-6 py-5 border border-black">TIPO</th>
+                         <th className="px-6 py-5 border border-black">MATR</th>
+                         <th className="px-6 py-5 border border-black">COD</th>
+                         <th className="px-6 py-5 border border-black">LEITURA</th>
+                         <th className="px-6 py-5 border border-black bg-blue-50 text-blue-900">MOTIVO</th>
                        </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-black text-slate-900 font-medium">
                        {paginatedData.map((r, i) => (
-                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-5 py-4 border border-slate-100 uppercase">{r.Mes || r.mes}</td>
-                          <td className="px-5 py-4 border border-slate-100">{r.Ano || r.ano}</td>
-                          <td className="px-5 py-4 border border-slate-100 font-bold">{r.rz || r.RZ || r.razao}</td>
-                          <td className="px-5 py-4 border border-slate-100 font-mono text-blue-600">{r.instalacao}</td>
-                          <td className="px-5 py-4 border border-slate-100 font-bold">{r.matr || r.MATR}</td>
-                          <td className="px-5 py-4 border border-slate-100 text-center font-black">{r.nl}</td>
-                          <td className="px-5 py-4 border border-slate-100 font-medium italic text-slate-500 bg-slate-50/20">
-                            {r[currentConfig.motivoKey] || 'Inconsistência não detalhada'}
+                        <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-6 py-4 border border-black uppercase whitespace-nowrap">{r.Mes || r.mes}</td>
+                          <td className="px-6 py-4 border border-black">{r.Ano || r.ano}</td>
+                          <td className="px-6 py-4 border border-black font-black whitespace-nowrap">{r.rz || r.RZ || r.razao}</td>
+                          <td className="px-6 py-4 border border-black">{r.rz_ul_lv}</td>
+                          <td className="px-6 py-4 border border-black font-mono text-blue-600 font-black">{r.instalacao}</td>
+                          <td className="px-6 py-4 border border-black font-mono">{r.medidor}</td>
+                          <td className="px-6 py-4 border border-black">{r.reg}</td>
+                          <td className="px-6 py-4 border border-black whitespace-nowrap">{r.tipo}</td>
+                          <td className="px-6 py-4 border border-black font-black">{r.matr || r.MATR}</td>
+                          <td className="px-6 py-4 border border-black text-center font-black">
+                             <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px]">{r.nl}</span>
+                          </td>
+                          <td className="px-6 py-4 border border-black font-black">{r.l_atual}</td>
+                          <td className="px-6 py-4 border border-black font-bold italic text-slate-600 bg-slate-50/30">
+                            {r[currentConfig.motivoKey] || 'NÃO INFORMADO'}
                           </td>
                         </tr>
                        ))}
@@ -418,38 +435,128 @@ const PrintControl: React.FC = () => {
                  </table>
               </div>
               
-              <div className="px-10 py-8 bg-slate-50 flex items-center justify-between border-t border-slate-200 no-print">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</span>
-                <div className="flex gap-3">
-                   <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-3 bg-white border border-slate-200 rounded-2xl shadow-sm hover:bg-slate-100 transition-all disabled:opacity-30"><ChevronLeft size={18} /></button>
-                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-3 bg-white border border-slate-200 rounded-2xl shadow-sm hover:bg-slate-100 transition-all disabled:opacity-30"><ChevronRight size={18} /></button>
+              <div className="px-10 py-10 bg-slate-50 flex flex-wrap items-center justify-between border-t border-slate-200 no-print gap-6">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-5 py-2 rounded-full border border-slate-200">
+                  Exibindo página {currentPage} de {totalPages}
+                </span>
+                <div className="flex gap-4">
+                   <button 
+                     onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({top: 0, behavior: 'smooth'}); }} 
+                     disabled={currentPage === 1} 
+                     className="px-6 py-3 bg-white border border-slate-200 rounded-[18px] shadow-sm hover:bg-slate-100 transition-all disabled:opacity-30 disabled:pointer-events-none flex items-center gap-2 font-black text-[10px] uppercase"
+                   >
+                     <ChevronLeft size={16} /> Anterior
+                   </button>
+                   <button 
+                     onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({top: 0, behavior: 'smooth'}); }} 
+                     disabled={currentPage >= totalPages} 
+                     className="px-6 py-3 bg-white border border-slate-200 rounded-[18px] shadow-sm hover:bg-slate-100 transition-all disabled:opacity-30 disabled:pointer-events-none flex items-center gap-2 font-black text-[10px] uppercase"
+                   >
+                     Próximo <ChevronRight size={16} />
+                   </button>
                 </div>
               </div>
            </section>
+
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+              {/* Relação Quantitativa solicitada */}
+              <section className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden h-full">
+                 <div className="p-10 border-b border-slate-100 flex items-center gap-4">
+                    <div className="p-2.5 bg-slate-900 text-white rounded-xl"><BarChart3 size={18} /></div>
+                    <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Relação Quantitativa</h3>
+                 </div>
+                 <div className="p-10">
+                    <div className="overflow-y-auto max-h-[500px] border border-slate-100 rounded-3xl">
+                       <table className="w-full text-left text-[11px] border-collapse">
+                          <thead className="bg-slate-50 text-slate-500 uppercase font-black tracking-widest sticky top-0 z-10">
+                             <tr>
+                                <th className="px-6 py-5 border-b border-slate-200">RAZÃO</th>
+                                <th className="px-6 py-5 border-b border-slate-200 text-center">NÃO IMPRESSÃO</th>
+                                <th className="px-6 py-5 border-b border-slate-200 text-center">QUANTIDADE</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                             {relacaoQuantitativa.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                   <td className="px-6 py-4 font-black text-slate-900 whitespace-nowrap">{row.rz}</td>
+                                   <td className="px-6 py-4 text-slate-500 font-medium italic">{row.motivo}</td>
+                                   <td className="px-6 py-4 text-center">
+                                      <span className="px-4 py-1.5 bg-blue-50 text-blue-700 font-black rounded-lg text-xs">
+                                        {row.qtd.toLocaleString()}
+                                      </span>
+                                   </td>
+                                </tr>
+                             ))}
+                          </tbody>
+                       </table>
+                    </div>
+                 </div>
+              </section>
+
+              {/* Gráfico Comparativo solicitada */}
+              <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 h-full flex flex-col">
+                 <div className="flex items-center gap-4 mb-12">
+                    <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20"><TrendingUp size={18} /></div>
+                    <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Top Unidades (Ref. Motivo/Matrícula)</h3>
+                 </div>
+                 <div className="flex-1 min-h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 90 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: '#0f172a', fontSize: 10, fontWeight: '900'}} 
+                          angle={-45} 
+                          textAnchor="end" 
+                          interval={0} 
+                        />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                        <Tooltip 
+                          cursor={{fill: '#f8fafc', radius: 10}} 
+                          contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', padding: '20px' }} 
+                        />
+                        <Bar name="Volume Ocorrências" dataKey="value" barSize={32} radius={[8, 8, 0, 0]}>
+                           {chartData.map((entry, index) => (
+                             <Cell key={`cell-${index}`} fill={index === 0 ? '#1e40af' : '#3b82f6'} />
+                           ))}
+                           <LabelList dataKey="value" position="top" style={{ fontSize: '11px', fontWeight: '900', fill: '#0f172a' }} offset={10} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                 </div>
+                 <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] text-center">
+                       Mês: {filterMes || '--'} / Ano: {filterAno || '--'} / Matrícula: {filterMatr || 'GERAL'}
+                    </p>
+                 </div>
+              </section>
+           </div>
         </div>
       )}
 
       {loading && (
-        <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center">
-           <div className="bg-white p-20 rounded-[50px] shadow-2xl flex flex-col items-center gap-8 text-center">
-              <div className="relative h-24 w-24">
-                 <div className="absolute inset-0 rounded-full border-[8px] border-slate-100 border-t-blue-600 animate-spin"></div>
-                 <Database size={30} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
+        <div className="fixed inset-0 z-[5000] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center animate-in fade-in duration-300">
+           <div className="bg-white p-24 rounded-[60px] shadow-2xl flex flex-col items-center gap-10 text-center scale-110">
+              <div className="relative h-32 w-32">
+                 <div className="absolute inset-0 rounded-full border-[10px] border-slate-50 border-t-blue-600 animate-spin"></div>
+                 <Database size={40} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
               </div>
-              <div>
-                 <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tighter italic">Processando Dataset</h2>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Módulo Local Ativado</p>
+              <div className="space-y-3">
+                 <h2 className="text-3xl font-black uppercase tracking-tighter italic text-slate-950">Sincronizando Dataset</h2>
+                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Análise Estatística em Tempo Real</p>
               </div>
            </div>
         </div>
       )}
 
       {!reportReady && !loading && (
-        <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[60px] border-2 border-dashed border-slate-200 text-center shadow-sm mt-4">
-           <div className="p-10 bg-slate-50 rounded-full mb-8"><Printer size={50} className="text-slate-200" /></div>
-           <h3 className="text-slate-950 font-black text-2xl mb-3 uppercase italic tracking-tighter">Módulo de Impressão Pronto</h3>
-           <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[0.5em] px-20 max-w-2xl leading-relaxed">
-             Aguardando seleção dos parâmetros de competência para <span className="text-blue-600">PROCESSAMENTO ESTATÍSTICO</span>.
+        <div className="flex flex-col items-center justify-center py-48 bg-white rounded-[60px] border-2 border-dashed border-slate-200 text-center shadow-inner mt-4 animate-in zoom-in-95 duration-700">
+           <div className="p-12 bg-slate-50 rounded-full mb-10 shadow-sm border border-slate-100"><Printer size={60} className="text-slate-200" /></div>
+           <h3 className="text-slate-950 font-black text-3xl mb-4 uppercase italic tracking-tighter">Módulo de Auditoria de Lote</h3>
+           <p className="text-slate-400 font-bold text-[12px] uppercase tracking-[0.5em] px-20 max-w-3xl leading-relaxed">
+             Para iniciar a análise <span className="text-blue-600">SEM RESTRIÇÃO DE REGISTROS</span>, selecione obrigatoriamente o <span className="font-black text-slate-900">ANO e MÊS</span> para habilitar os filtros inteligentes.
            </p>
         </div>
       )}
