@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
@@ -13,7 +14,7 @@ import {
   Filter, Play, RotateCcw, Loader2, Database, 
   TrendingUp, List, 
   ChevronLeft, ChevronRight,
-  ShieldAlert, ScanLine, FileBarChart,
+  ShieldAlert, ScanLine, 
   Printer, AlertCircle, Layout
 } from 'lucide-react';
 import { 
@@ -72,6 +73,7 @@ const PrintControl: React.FC = () => {
 
   const currentConfig = menuConfig[activeSubMenu];
 
+  // 1. Carregamento de Metadados Base (Ano/Mês)
   useEffect(() => {
     const fetchBaseMetadata = async () => {
       try {
@@ -121,8 +123,10 @@ const PrintControl: React.FC = () => {
     return { label: val, value: val };
   };
 
+  // 2. AJUSTE CIRÚRGICO: Carregamento Dinâmico de Razão Social e Técnico (Somente se Ano e Mês selecionados)
   useEffect(() => {
     const fetchFiltrosDinamicos = async () => {
+      // Regra: Somente disparar se ambos estiverem preenchidos
       if (!filterAno || !filterMes) {
         setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
         setFilterRazao('');
@@ -131,6 +135,7 @@ const PrintControl: React.FC = () => {
       }
       
       setLoadingFilters(true);
+      // Resetar seleções atuais ao trocar o período
       setFilterRazao('');
       setFilterMatr('');
 
@@ -138,6 +143,7 @@ const PrintControl: React.FC = () => {
         const p_ano = Number(filterAno);
         const p_mes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
 
+        // Chamada das RPCs de interface (UI) filtradas por competência
         const [resRz, resMatr] = await Promise.all([
           supabase.rpc(RPC_FILTRO_RAZAO_CI_UI, { p_ano, p_mes }),
           supabase.rpc(RPC_FILTRO_MATRICULA_CI_UI, { p_ano, p_mes })
@@ -169,8 +175,7 @@ const PrintControl: React.FC = () => {
       const numAno = Number(filterAno);
       const numMes = MONTH_ORDER[filterMes] || MONTH_ORDER[filterMes.toUpperCase()] || 0;
 
-      // AJUSTE OBRIGATÓRIO: Enviando parâmetros exatos da assinatura da RPC para evitar erro PGRST202
-      // Alinhamento conforme solicitação técnica (p_limit ajustado para 10000)
+      // Execução da análise respeitando a assinatura exata da RPC
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: numAno,
         p_mes: numMes,
@@ -180,8 +185,6 @@ const PrintControl: React.FC = () => {
         p_offset: 0,
         p_motivo: null
       });
-
-      console.log("RETORNO BRUTO RPC IMPRESSÃO:", data);
 
       if (error) throw error;
       setDataset(Array.isArray(data) ? data : []);
@@ -214,10 +217,8 @@ const PrintControl: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = dataset.length;
-    let impressao = 0;
-    let naoImpressao = total;
-
-    return { total, impressao, naoImpressao };
+    const naoImpressao = total; // No contexto de NOSB, todos os retornados são não impressões
+    return { total, naoImpressao };
   }, [dataset]);
 
   const groupedByRazao = useMemo(() => {
@@ -413,11 +414,6 @@ const PrintControl: React.FC = () => {
                           </td>
                         </tr>
                        ))}
-                       {dataset.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="px-5 py-20 text-center text-slate-400 font-bold uppercase">Nenhum registro localizado</td>
-                        </tr>
-                       )}
                     </tbody>
                  </table>
               </div>
