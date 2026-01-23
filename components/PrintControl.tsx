@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
   RPC_CE_FILTRO_ANO,
@@ -9,10 +9,10 @@ import {
 } from '../constants';
 import { 
   Filter, Play, RotateCcw, Loader2, Database, 
-  TrendingUp, List, 
+  TrendingUp, Layout, 
   ChevronLeft, ChevronRight,
   ShieldAlert, ScanLine, 
-  Printer, AlertCircle, Layout, FileSpreadsheet, FileText, BarChart3, Info,
+  Printer, AlertCircle, FileSpreadsheet, FileText, BarChart3, Info,
   Search, CheckCircle2, ChevronDown, Activity
 } from 'lucide-react';
 import { 
@@ -99,44 +99,32 @@ const PrintControl: React.FC = () => {
     fetchBaseFilters();
   }, []);
 
-  // GATILHO AUTOMÁTICO: Ano + Mês = Executar RPC
-  useEffect(() => {
-    if (filterAno && filterMes) {
-      handleProcessarRPC();
-    } else {
-      setReportReady(false);
-      setFullDataset([]);
-      setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
-    }
-  }, [filterAno, filterMes, activeSubMenu]);
-
-  // FASE 1: Executar RPC rpc_leitura_nosb
-  const handleProcessarRPC = async () => {
-    if (!filterAno || !filterMes) return;
+  // FASE 1: Executar RPC rpc_leitura_nosb e extrair filtros dinâmicos
+  const handleProcessarRPC = useCallback(async (ano: string, mes: string) => {
+    if (!ano || !mes) return;
 
     setLoading(true);
-    setReportReady(false);
+    // Não alteramos reportReady imediatamente para manter a estabilidade da UI enquanto carrega
     
     try {
       const { data, error } = await supabase.rpc('rpc_leitura_nosb', {
-        p_ano: Number(filterAno),
-        p_mes: filterMes
+        p_ano: Number(ano),
+        p_mes: mes
       });
 
       if (error) throw error;
 
-      // Garantir que dataset seja um array iterável conforme retorno da RPC
       const dataset = Array.isArray(data) ? data : [];
       setFullDataset(dataset);
 
-      // FASE 2: Popular filtros Razão e Matrícula via DISTINCT (Utilizando rz e matr conforme especificação)
+      // FASE 2: Popular filtros Razão e Matrícula via DISTINCT do retorno da RPC
       const rzSet = new Set<string>();
       const mtSet = new Set<string>();
 
       dataset.forEach(item => {
-        // Validação explícita da estrutura do retorno conforme RETURNS TABLE (rz, matr, mes, ano)
-        const currentRz = item.rz || item.RZ;
-        const currentMatr = item.matr || item.MATR;
+        // Suporte a variações de case conforme retorno da RPC
+        const currentRz = item.rz ?? item.RZ;
+        const currentMatr = item.matr ?? item.MATR;
 
         if (currentRz !== undefined && currentRz !== null && String(currentRz).trim() !== "") {
           rzSet.add(String(currentRz).trim());
@@ -160,7 +148,19 @@ const PrintControl: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // GATILHO AUTOMÁTICO: Ano + Mês = Executar RPC (Sem necessidade de clique em botão)
+  useEffect(() => {
+    if (filterAno && filterMes) {
+      handleProcessarRPC(filterAno, filterMes);
+    } else {
+      // Reset de opções se os campos de data forem limpos
+      setFullDataset([]);
+      setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
+      setReportReady(false);
+    }
+  }, [filterAno, filterMes, activeSubMenu, handleProcessarRPC]);
 
   const handleReset = () => {
     setFilterAno('');
@@ -173,7 +173,7 @@ const PrintControl: React.FC = () => {
     setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
   };
 
-  // Dataset Filtrado com base nos filtros da UI
+  // Dataset Filtrado com base nos filtros da UI (Razão/Matrícula)
   const filteredData = useMemo(() => {
     return fullDataset.filter(item => {
       const itemRz = String(item.rz || item.RZ || '').trim();
@@ -191,7 +191,7 @@ const PrintControl: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
 
-  // Relação Quantitativa
+  // Relação Quantitativa agrupada por Razão e Motivo
   const relacaoQuantitativa = useMemo(() => {
     const map: Record<string, { rz: string, motivo: string, qtd: number }> = {};
     filteredData.forEach(r => {
@@ -206,7 +206,7 @@ const PrintControl: React.FC = () => {
     return Object.values(map).sort((a, b) => b.qtd - a.qtd);
   }, [filteredData, currentConfig.motivoKey]);
 
-  // Dados do Gráfico
+  // Dados do Gráfico Baseados na Dimensão Ativa
   const chartData = useMemo(() => {
     const map: Record<string, number> = {};
     filteredData.forEach(r => {
@@ -321,16 +321,16 @@ const PrintControl: React.FC = () => {
            </div>
            
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione a Razão</label>
-             <select disabled={!reportReady} value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 font-bold disabled:opacity-30 outline-none">
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Razão Social</label>
+             <select disabled={options.razoes.length === 0} value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 font-bold disabled:opacity-30 outline-none">
                <option value="">Todas ({options.razoes.length})</option>
                {options.razoes.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
              </select>
            </div>
            
            <div className="space-y-3">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione a Matrícula</label>
-             <select disabled={!reportReady} value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 font-bold disabled:opacity-30 outline-none">
+             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matrícula / Técnico</label>
+             <select disabled={options.matriculas.length === 0} value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 font-bold disabled:opacity-30 outline-none">
                <option value="">Geral ({options.matriculas.length})</option>
                {options.matriculas.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
@@ -339,12 +339,12 @@ const PrintControl: React.FC = () => {
 
         <div className="mt-12 flex justify-center gap-6">
            <button 
-             onClick={handleProcessarRPC} 
+             onClick={() => handleProcessarRPC(filterAno, filterMes)} 
              disabled={!filterAno || !filterMes || loading} 
              className="px-20 py-5 bg-blue-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest shadow-2xl shadow-blue-500/30 flex items-center gap-4 hover:bg-blue-700 hover:scale-[1.02] transition-all disabled:opacity-50"
            >
               {loading ? <Loader2 className="animate-spin" size={18}/> : <Play size={16} fill="currentColor"/>} 
-              RECARREGAR AUDITORIA
+              REPROCESSAR AUDITORIA
            </button>
            <button onClick={handleReset} className="px-10 py-5 bg-slate-100 text-slate-500 rounded-[24px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all">
               <RotateCcw size={16} /> REINICIAR
