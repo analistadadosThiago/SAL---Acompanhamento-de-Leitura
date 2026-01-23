@@ -4,20 +4,17 @@ import { supabase } from '../services/supabaseClient';
 import { 
   RPC_CE_FILTRO_ANO,
   RPC_CE_FILTRO_MES,
+  RPC_CE_IMPEDIMENTOS,
+  RPC_CE_SIMULACAO_NOSB,
   MONTH_ORDER
 } from '../constants';
 import { 
   Filter, RotateCcw, Database, 
-  TrendingUp, Layout, 
   ChevronLeft, ChevronRight,
   ShieldAlert, ScanLine, 
   FileSpreadsheet,
-  CheckCircle2, Activity, Play, Search, X
+  CheckCircle2, Activity, Play, Search
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, LabelList, Cell
-} from 'recharts';
 import * as XLSX from 'xlsx';
 
 const ITEMS_PER_PAGE = 25;
@@ -57,7 +54,7 @@ const PrintControl: React.FC = () => {
     meses: [] as { label: string; value: string }[]
   });
 
-  // Estados Isolados por SubMenu
+  // Estados Isolados por SubMenu (Isolamento Total)
   const [states, setStates] = useState<Record<PrintSubMenu, SubMenuState>>({
     [PrintSubMenu.NOSB_IMPEDIMENTO]: { ...initialSubState },
     [PrintSubMenu.NOSB_SIMULACAO]: { ...initialSubState }
@@ -69,18 +66,20 @@ const PrintControl: React.FC = () => {
     [PrintSubMenu.NOSB_IMPEDIMENTO]: {
       label: 'Impedimentos (NOSB)',
       icon: <ShieldAlert size={16}/>,
+      rpc: RPC_CE_IMPEDIMENTOS,
       motivoKey: 'nosb_impedimento'
     },
     [PrintSubMenu.NOSB_SIMULACAO]: {
       label: 'Simulação (NOSB)',
       icon: <ScanLine size={16}/>,
+      rpc: RPC_CE_SIMULACAO_NOSB,
       motivoKey: 'nosb_simulacao'
     }
   };
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // Carregar Metadados (Ano/Mês) apenas uma vez
+  // Carregar Metadados (Ano/Mês) iniciais para os filtros visuais
   useEffect(() => {
     const fetchBaseFilters = async () => {
       try {
@@ -116,8 +115,8 @@ const PrintControl: React.FC = () => {
     
     setLoading(true);
     try {
-      // REGRA: RPC SEM PARÂMETROS
-      const { data, error } = await supabase.rpc('rpc_leitura_nosb');
+      // REGRA: Executar a RPC correspondente SEM enviar parâmetros
+      const { data, error } = await supabase.rpc(currentConfig.rpc);
       
       if (error) throw error;
       
@@ -127,7 +126,7 @@ const PrintControl: React.FC = () => {
         currentPage: 1
       });
     } catch (err) {
-      console.error("Erro rpc_leitura_nosb:", err);
+      console.error(`Erro ao executar ${currentConfig.rpc}:`, err);
       alert("Falha na sincronização com o banco de dados.");
     } finally {
       setLoading(false);
@@ -138,25 +137,31 @@ const PrintControl: React.FC = () => {
     updateCurrentState({ ...initialSubState });
   };
 
-  // Filtragem Local Baseada em Lote (Ano/Mês) e Busca Interna
+  // Filtragem LOCAL (Frontend) por Ano e Mês (Lote de Competência)
   const filteredData = useMemo(() => {
     if (!currentSubState.datasetRaw) return [];
     
     const targetAno = Number(currentSubState.filterAno);
-    const targetMes = MONTH_ORDER[currentSubState.filterMes.toUpperCase()];
+    const targetMesStr = currentSubState.filterMes.toUpperCase();
+    const targetMesNum = MONTH_ORDER[targetMesStr];
 
     return currentSubState.datasetRaw.filter(item => {
-      // 1. Filtro de Lote (Obrigatório)
-      const matchAno = Number(item.ano || item.Ano) === targetAno;
-      const matchMes = Number(item.mes || item.Mes) === targetMes || String(item.mes || item.Mes).toUpperCase() === currentSubState.filterMes.toUpperCase();
+      // 1. Filtragem por Lote (Obrigatória no Frontend)
+      const itemAno = Number(item.ano || item.Ano);
+      const itemMes = item.mes || item.Mes;
+      const itemMesStr = String(itemMes).toUpperCase();
+      const itemMesNum = Number(itemMes) || MONTH_ORDER[itemMesStr];
+
+      const matchAno = itemAno === targetAno;
+      const matchMes = itemMesNum === targetMesNum || itemMesStr === targetMesStr;
       
       if (!matchAno || !matchMes) return false;
 
-      // 2. Filtro de Tipo de Motivo (Garantir que o registro pertença ao contexto da aba)
+      // 2. Garantia de Contexto (Motivo deve existir para a aba ativa)
       const motivoVal = String(item[currentConfig.motivoKey] || '');
       if (!motivoVal || motivoVal === 'null' || motivoVal.trim() === '') return false;
 
-      // 3. Filtros de Busca Frontend
+      // 3. Filtros de Busca Interna (Frontend)
       const itemRz = String(item.rz || item.RZ || '').toLowerCase();
       const itemMatr = String(item.matr || item.MATR || '').toLowerCase();
       const itemMotivo = motivoVal.toLowerCase();
@@ -185,7 +190,7 @@ const PrintControl: React.FC = () => {
 
   return (
     <div className="space-y-10 pb-40 animate-in fade-in duration-500">
-      {/* Sub-menu Isolado */}
+      {/* Navegação de Submenus Isolados */}
       <nav className="bg-white p-2 rounded-[24px] flex gap-2 shadow-sm border border-slate-200">
         {Object.entries(menuConfig).map(([key, config]) => {
           const isActive = activeSubMenu === key;
@@ -204,7 +209,7 @@ const PrintControl: React.FC = () => {
         })}
       </nav>
 
-      {/* Seleção de Parâmetros de Lote */}
+      {/* Parâmetros Visuais de Lote (Filtragem Frontend) */}
       <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200">
         <div className="flex items-center gap-3 mb-10">
            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Filter size={18} /></div>
@@ -254,7 +259,7 @@ const PrintControl: React.FC = () => {
 
       {currentSubState.displayResults && (
         <div className="space-y-12 animate-in slide-in-from-bottom-10 duration-700">
-           {/* Indicadores do Lote */}
+           {/* Cards de Resumo do Lote */}
            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="bg-white p-8 rounded-[28px] border-l-[6px] border-blue-600 shadow-sm border border-slate-200">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Dataset Lote</p>
@@ -279,11 +284,11 @@ const PrintControl: React.FC = () => {
               </div>
            </div>
 
-           {/* Listagem Analítica */}
+           {/* Listagem Analítica do Mês/Ano Selecionado */}
            <section className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-10 border-b border-slate-100 flex flex-wrap items-center justify-between gap-6">
                 <div className="flex items-center gap-3">
-                  <Layout size={20} className="text-blue-600" />
+                  <Database size={20} className="text-blue-600" />
                   <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Listagem Analítica do Lote</h3>
                 </div>
                 <button onClick={exportExcel} className="flex items-center gap-3 px-8 py-4 bg-green-50 text-green-700 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-green-100 transition-all border border-green-200">
@@ -291,7 +296,7 @@ const PrintControl: React.FC = () => {
                 </button>
               </div>
 
-              {/* Filtros Internos Operando no Frontend */}
+              {/* Filtros Internos (Frontend Only) */}
               <div className="p-8 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
@@ -349,9 +354,9 @@ const PrintControl: React.FC = () => {
                           <td className="px-5 py-4 border border-slate-100 font-bold uppercase">{r.mes || r.Mes}</td>
                           <td className="px-5 py-4 border border-slate-100">{r.ano || r.Ano}</td>
                           <td className="px-5 py-4 border border-slate-100 font-black uppercase truncate max-w-[150px]">{r.rz || r.RZ}</td>
-                          <td className="px-5 py-4 border border-slate-100 text-slate-400">{r.rz_ul_lv}</td>
+                          <td className="px-5 py-4 border border-slate-100 text-slate-400 whitespace-nowrap">{r.rz_ul_lv}</td>
                           <td className="px-5 py-4 border border-slate-100 font-mono font-black text-blue-600">{r.instalacao}</td>
-                          <td className="px-5 py-4 border border-slate-100 font-mono">{r.medidor}</td>
+                          <td className="px-5 py-4 border border-slate-100 font-mono whitespace-nowrap">{r.medidor}</td>
                           <td className="px-5 py-4 border border-slate-100">{r.reg}</td>
                           <td className="px-5 py-4 border border-slate-100 uppercase text-[9px] font-bold">{r.tipo}</td>
                           <td className="px-5 py-4 border border-slate-100 font-black">{r.matr || r.MATR}</td>
@@ -371,6 +376,7 @@ const PrintControl: React.FC = () => {
                  </table>
               </div>
 
+              {/* Paginação Profissional */}
               <div className="px-10 py-10 bg-slate-50 flex items-center justify-between border-t">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Página {currentSubState.currentPage} de {totalPages} ({filteredData.length} registros)
@@ -396,6 +402,7 @@ const PrintControl: React.FC = () => {
         </div>
       )}
 
+      {/* Loading Overlay com Backdrop Blur */}
       {loading && (
         <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center">
            <div className="bg-white p-24 rounded-[60px] shadow-2xl flex flex-col items-center gap-10 animate-in zoom-in-95 duration-300">
