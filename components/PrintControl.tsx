@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight,
   ShieldAlert, ScanLine, 
   Printer, AlertCircle, Layout, FileSpreadsheet, FileText, BarChart3, Info,
-  Search, CheckCircle2, ChevronDown
+  Search, CheckCircle2, ChevronDown, Activity
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -41,13 +41,13 @@ interface OptionItem {
 const PrintControl: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState<PrintSubMenu>(PrintSubMenu.NOSB_IMPEDIMENTO);
   
-  // Estados de Filtro
+  // Filtros de Estado
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMes, setFilterMes] = useState<string>('');
   const [filterMatr, setFilterMatr] = useState<string>('');
   const [filterRazao, setFilterRazao] = useState<string>('');
   
-  // Opções dos Selects
+  // Opções para Selects (Metadados)
   const [options, setOptions] = useState({
     anos: [] as string[],
     meses: [] as OptionItem[],
@@ -55,12 +55,13 @@ const PrintControl: React.FC = () => {
     matriculas: [] as OptionItem[]
   });
 
-  // Dataset e Controle de UI
+  // Controle de Dados e UI
   const [dataset, setDataset] = useState<any[]>([]);
   const [reportReady, setReportReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [chartDimension, setChartDimension] = useState<'rz' | 'matr' | 'motivo'>('rz');
 
   const menuConfig = {
     [PrintSubMenu.NOSB_IMPEDIMENTO]: {
@@ -79,7 +80,7 @@ const PrintControl: React.FC = () => {
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // 1. Efeito Inicial: Carregar Anos e Meses Disponíveis
+  // Fase 0: Carregar Anos e Meses (Metadados Base)
   useEffect(() => {
     const fetchBaseMetadata = async () => {
       try {
@@ -106,19 +107,17 @@ const PrintControl: React.FC = () => {
 
         setOptions(prev => ({ ...prev, anos: anosList, meses: mesesList }));
       } catch (err) {
-        console.error("SAL_ERROR: Falha ao carregar metadados base.");
+        console.error("SAL_ERROR: Erro ao carregar metadados iniciais.");
       }
     };
     fetchBaseMetadata();
   }, []);
 
-  // 2. Filtros Dinâmicos (Chaining): Carrega Razões e Técnicos após Ano/Mês selecionados
+  // FASE 1: CARGA DE PRÉ-FILTRO MATERIALIZADO (LEVE)
   useEffect(() => {
-    const fetchFiltrosDinamicos = async () => {
+    const fetchPreFiltros = async () => {
       if (!filterAno || !filterMes) {
         setOptions(prev => ({ ...prev, razoes: [], matriculas: [] }));
-        setFilterRazao('');
-        setFilterMatr('');
         return;
       }
       
@@ -127,7 +126,7 @@ const PrintControl: React.FC = () => {
         const p_ano = Number(filterAno);
         const p_mes = filterMes;
 
-        // Busca razões e matrículas únicas para o período selecionado para garantir população total
+        // Carga leve: apenas rz e matr para popular filtros sem sobrecarga
         const { data, error } = await supabase
           .from(TABLE_NAME)
           .select('rz, matr')
@@ -149,16 +148,16 @@ const PrintControl: React.FC = () => {
 
         setOptions(prev => ({ ...prev, razoes: rzList, matriculas: mtList }));
       } catch (err) {
-        console.error("SAL_ERROR: Erro ao carregar filtros dependentes.", err);
+        console.error("SAL_ERROR: Erro na Fase 1 (Pré-filtro).", err);
       } finally {
         setLoadingFilters(false);
       }
     };
-    fetchFiltrosDinamicos();
+    fetchPreFiltros();
   }, [filterAno, filterMes]);
 
-  // 3. Execução da Análise (Sem Limite de 1000 registros)
-  const handleProcessarImpressao = async () => {
+  // FASE 2: CARGA DE DADOS DETALHADOS (SOB DEMANDA)
+  const handleProcessarDataset = async () => {
     if (!filterAno || !filterMes) return;
 
     setLoading(true);
@@ -168,13 +167,13 @@ const PrintControl: React.FC = () => {
       const numAno = Number(filterAno);
       const p_mes = filterMes;
 
-      // Executa a RPC correspondente com limite massivo (1 milhão) para análise completa sem cortes
+      // Busca dados detalhados usando a RPC com os filtros de pré-seleção
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: numAno,
         p_mes: p_mes,
         p_matr: filterMatr || null,
         p_rz: filterRazao || null,
-        p_limit: 1000000, 
+        p_limit: 1000000, // Limite massivo para evitar cortes no dataset analítico
         p_offset: 0,
         p_motivo: null
       });
@@ -184,7 +183,7 @@ const PrintControl: React.FC = () => {
       setReportReady(true);
       setCurrentPage(1);
     } catch (err: any) { 
-      console.error("SAL_ERROR: Erro no processamento estatístico:", err);
+      console.error("SAL_ERROR: Erro na Fase 2 (Processamento Dataset):", err);
     } finally { 
       setLoading(false); 
     }
@@ -200,7 +199,7 @@ const PrintControl: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Memoization: Paginação Visual
+  // Paginação Visual do Dataset Carregado
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return dataset.slice(start, start + ITEMS_PER_PAGE);
@@ -208,7 +207,7 @@ const PrintControl: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(dataset.length / ITEMS_PER_PAGE));
 
-  // Memoization: Relação Quantitativa (Agrupada por Razão e Motivo)
+  // Relação Quantitativa (Agrupada por Razão e Motivo)
   const relacaoQuantitativa = useMemo(() => {
     const map: Record<string, { rz: string, motivo: string, qtd: number }> = {};
     dataset.forEach(r => {
@@ -223,25 +222,44 @@ const PrintControl: React.FC = () => {
     return Object.values(map).sort((a, b) => b.qtd - a.qtd);
   }, [dataset, currentConfig.motivoKey]);
 
-  // Memoization: Dados do Gráfico (Comparativo: Motivo, Razão, Matrícula, Mês, Ano)
+  // Dados do Gráfico Baseado na Dimensão Selecionada
   const chartData = useMemo(() => {
     const map: Record<string, number> = {};
     dataset.forEach(r => {
-      const rz = String(r.rz || r.RZ || r.razao || 'N/A').trim();
-      map[rz] = (map[rz] || 0) + 1;
+      let key = 'N/A';
+      if (chartDimension === 'rz') key = String(r.rz || r.RZ || r.razao || 'N/A');
+      else if (chartDimension === 'matr') key = String(r.matr || r.MATR || 'N/A');
+      else if (chartDimension === 'motivo') key = String(r[currentConfig.motivoKey] || 'N/A');
+      
+      key = key.trim();
+      map[key] = (map[key] || 0) + 1;
     });
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 15);
-  }, [dataset]);
+  }, [dataset, chartDimension, currentConfig.motivoKey]);
 
   const exportExcel = () => {
     if (dataset.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(dataset);
+    const exportData = dataset.map(r => ({
+      MÊS: r.Mes || r.mes,
+      ANO: r.Ano || r.ano,
+      RAZÃO: r.rz || r.RZ || r.razao,
+      UL: r.rz_ul_lv,
+      INSTALAÇÃO: r.instalacao,
+      MEDIDOR: r.medidor,
+      REG: r.reg,
+      TIPO: r.tipo,
+      MATRÍCULA: r.matr || r.MATR,
+      CÓDIGO: r.nl,
+      LEITURA: r.l_atual,
+      MOTIVO: r[currentConfig.motivoKey] || 'NÃO INFORMADO'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Dados Impressão");
-    XLSX.writeFile(wb, `SAL_Análise_${currentConfig.label}_${filterMes}_${filterAno}.xlsx`);
+    XLSX.writeFile(wb, `SAL_Export_${currentConfig.label}_${filterMes}_${filterAno}.xlsx`);
   };
 
   const exportPDF = () => {
@@ -255,7 +273,7 @@ const PrintControl: React.FC = () => {
     autoTable(doc, {
       html: '#print-analitico-table',
       theme: 'grid',
-      styles: { fontSize: 6.5, cellPadding: 1 },
+      styles: { fontSize: 6.5, cellPadding: 1, lineColor: [0, 0, 0], lineWidth: 0.1 },
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
       margin: { top: 25 }
     });
@@ -287,7 +305,7 @@ const PrintControl: React.FC = () => {
         })}
       </nav>
 
-      {/* Visual Information Banner (Exibição Informativa solicitada) */}
+      {/* Informativo Visual Selecionado */}
       <div className="bg-slate-900 rounded-[32px] p-8 text-white flex flex-wrap gap-x-16 gap-y-6 no-print border border-white/5 shadow-2xl relative overflow-hidden">
          <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none rotate-12"><Printer size={160} /></div>
          <div className="flex flex-col relative z-10">
@@ -308,7 +326,7 @@ const PrintControl: React.FC = () => {
          </div>
       </div>
 
-      {/* Parâmetros de Filtro Operacional com Rótulos Solicitados */}
+      {/* Configuração de Parâmetros (Pré-filtro) */}
       <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 no-print">
         <div className="flex items-center gap-4 mb-10">
           <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20"><Filter size={20} /></div>
@@ -318,7 +336,7 @@ const PrintControl: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
            <div className="space-y-3">
              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecione o Ano</label>
-             <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+             <select value={filterAno} onChange={e => { setFilterAno(e.target.value); setFilterRazao(''); setFilterMatr(''); }} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
                <option value="">Selecione...</option>
                {options.anos.map(a => <option key={a} value={a}>{a}</option>)}
              </select>
@@ -326,7 +344,7 @@ const PrintControl: React.FC = () => {
            
            <div className="space-y-3">
              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecione o Mês</label>
-             <select value={filterMes} onChange={e => setFilterMes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
+             <select value={filterMes} onChange={e => { setFilterMes(e.target.value); setFilterRazao(''); setFilterMatr(''); }} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4.5 px-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 transition-all outline-none">
                <option value="">Selecione...</option>
                {options.meses.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
              </select>
@@ -357,7 +375,7 @@ const PrintControl: React.FC = () => {
 
         <div className="mt-14 flex flex-col sm:flex-row justify-center items-center gap-6">
            <button 
-             onClick={handleProcessarImpressao} 
+             onClick={handleProcessarDataset} 
              disabled={!filterAno || !filterMes || loading} 
              className="w-full sm:w-auto px-24 py-5.5 bg-blue-600 text-white rounded-[24px] font-black text-xs uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 flex items-center justify-center gap-4 hover:bg-blue-700 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
            >
@@ -372,14 +390,14 @@ const PrintControl: React.FC = () => {
 
       {reportReady && (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
-           {/* Indicadores Resumo */}
+           {/* Indicadores Consolidados */}
            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <IndicatorCard label="Dataset Analisado" value={dataset.length.toLocaleString()} icon={<Database size={24}/>} color="blue" />
               <IndicatorCard label="Ocorrências Localizadas" value={dataset.length.toLocaleString()} icon={<ShieldAlert size={24}/>} color="red" />
               <IndicatorCard label="Cobertura de Lote" value="100" suffix="%" icon={<CheckCircle2 size={24}/>} color="amber" />
            </div>
 
-           {/* Tabela Analítica - Estrutura de Colunas solicitada */}
+           {/* Listagem Analítica */}
            <section className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-10 border-b border-slate-100 flex flex-wrap items-center justify-between gap-6 no-print">
                 <div className="flex items-center gap-3">
@@ -410,7 +428,7 @@ const PrintControl: React.FC = () => {
                          <th className="px-6 py-5 border border-black bg-blue-50 text-blue-900">MOTIVO</th>
                        </tr>
                     </thead>
-                    <tbody className="divide-y divide-black text-slate-900 font-medium">
+                    <tbody className="divide-y divide-black text-slate-900 font-medium bg-white">
                        {paginatedData.map((r, i) => (
                         <tr key={i} className="hover:bg-slate-50/80 transition-colors">
                           <td className="px-6 py-4 border border-black uppercase whitespace-nowrap">{r.Mes || r.mes}</td>
@@ -431,6 +449,11 @@ const PrintControl: React.FC = () => {
                           </td>
                         </tr>
                        ))}
+                       {dataset.length === 0 && (
+                        <tr>
+                          <td colSpan={12} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest">Nenhum dado detalhado carregado</td>
+                        </tr>
+                       )}
                     </tbody>
                  </table>
               </div>
@@ -459,7 +482,7 @@ const PrintControl: React.FC = () => {
            </section>
 
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              {/* Relação Quantitativa solicitada */}
+              {/* Relação Quantitativa */}
               <section className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden h-full">
                  <div className="p-10 border-b border-slate-100 flex items-center gap-4">
                     <div className="p-2.5 bg-slate-900 text-white rounded-xl"><BarChart3 size={18} /></div>
@@ -487,17 +510,29 @@ const PrintControl: React.FC = () => {
                                    </td>
                                 </tr>
                              ))}
+                             {relacaoQuantitativa.length === 0 && (
+                              <tr>
+                                <td colSpan={3} className="px-6 py-8 text-center text-slate-300 font-bold uppercase">Sem agrupamentos disponíveis</td>
+                              </tr>
+                             )}
                           </tbody>
                        </table>
                     </div>
                  </div>
               </section>
 
-              {/* Gráfico Comparativo solicitada */}
+              {/* Gráfico Comparativo Dinâmico */}
               <section className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 h-full flex flex-col">
-                 <div className="flex items-center gap-4 mb-12">
-                    <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20"><TrendingUp size={18} /></div>
-                    <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Top Unidades (Ref. Motivo/Matrícula)</h3>
+                 <div className="flex flex-wrap items-center justify-between gap-6 mb-12">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20"><TrendingUp size={18} /></div>
+                      <h3 className="text-base font-black uppercase tracking-tighter italic text-slate-900">Top Ocorrências</h3>
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                       <button onClick={() => setChartDimension('rz')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${chartDimension === 'rz' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Razão</button>
+                       <button onClick={() => setChartDimension('matr')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${chartDimension === 'matr' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Técnico</button>
+                       <button onClick={() => setChartDimension('motivo')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${chartDimension === 'motivo' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Motivo</button>
+                    </div>
                  </div>
                  <div className="flex-1 min-h-[400px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -528,7 +563,7 @@ const PrintControl: React.FC = () => {
                  </div>
                  <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] text-center">
-                       Mês: {filterMes || '--'} / Ano: {filterAno || '--'} / Matrícula: {filterMatr || 'GERAL'}
+                       Visualização: {chartDimension.toUpperCase()} | Filtros Ativos: {filterMes || '--'}/{filterAno || '--'}
                     </p>
                  </div>
               </section>
@@ -536,27 +571,29 @@ const PrintControl: React.FC = () => {
         </div>
       )}
 
+      {/* Overlay de Processamento */}
       {loading && (
         <div className="fixed inset-0 z-[5000] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center animate-in fade-in duration-300">
            <div className="bg-white p-24 rounded-[60px] shadow-2xl flex flex-col items-center gap-10 text-center scale-110">
               <div className="relative h-32 w-32">
                  <div className="absolute inset-0 rounded-full border-[10px] border-slate-50 border-t-blue-600 animate-spin"></div>
-                 <Database size={40} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
+                 <Activity size={40} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
               </div>
               <div className="space-y-3">
-                 <h2 className="text-3xl font-black uppercase tracking-tighter italic text-slate-950">Sincronizando Dataset</h2>
-                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Análise Estatística em Tempo Real</p>
+                 <h2 className="text-3xl font-black uppercase tracking-tighter italic text-slate-950">Análise de Dataset</h2>
+                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Processamento Estratégico em Tempo Real</p>
               </div>
            </div>
         </div>
       )}
 
+      {/* Estado Vazio / Instrução Inicial */}
       {!reportReady && !loading && (
         <div className="flex flex-col items-center justify-center py-48 bg-white rounded-[60px] border-2 border-dashed border-slate-200 text-center shadow-inner mt-4 animate-in zoom-in-95 duration-700">
            <div className="p-12 bg-slate-50 rounded-full mb-10 shadow-sm border border-slate-100"><Printer size={60} className="text-slate-200" /></div>
            <h3 className="text-slate-950 font-black text-3xl mb-4 uppercase italic tracking-tighter">Módulo de Auditoria de Lote</h3>
            <p className="text-slate-400 font-bold text-[12px] uppercase tracking-[0.5em] px-20 max-w-3xl leading-relaxed">
-             Para iniciar a análise <span className="text-blue-600">SEM RESTRIÇÃO DE REGISTROS</span>, selecione obrigatoriamente o <span className="font-black text-slate-900">ANO e MÊS</span> para habilitar os filtros inteligentes.
+             Selecione obrigatoriamente o <span className="text-blue-600">ANO e MÊS</span> para habilitar os filtros inteligentes de pré-carga. O processamento detalhado só ocorrerá após o comando manual.
            </p>
         </div>
       )}
