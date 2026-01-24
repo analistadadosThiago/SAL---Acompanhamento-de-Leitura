@@ -45,7 +45,7 @@ const App: React.FC = () => {
     { id: Menu.CONSULTA_TECNICA, label: 'Consulta Técnica', icon: <Search size={20} /> },
     { id: Menu.CONTROLE_LEITURISTA, label: 'Produtividade', icon: <Users size={20} /> },
     { id: Menu.CONTROLE_EVIDENCIAS, label: 'Auditoria', icon: <ImageIcon size={20} /> },
-    { id: Menu.CONTROLE_IMPRESSAO, label: 'Faturamento', icon: <Printer size={20} /> },
+    { id: Menu.CONTROLE_IMPRESSAO, label: 'Impressão', icon: <Printer size={20} /> },
   ];
 
   return (
