@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
   BarChart3, Users, Image as ImageIcon, Printer, 
-  Settings, LogOut, Bell, Globe
+  Settings, LogOut, Bell, Globe, ListChecks
 } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
@@ -11,6 +11,7 @@ import TechnicalSearch from './components/TechnicalSearch';
 import LeituristaControl from './components/LeituristaControl';
 import EvidenceControl from './components/EvidenceControl';
 import PrintControl from './components/PrintControl';
+import NosbMotifs from './components/NosbMotifs';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -25,6 +26,7 @@ const App: React.FC = () => {
       case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
       case Menu.CONTROLE_EVIDENCIAS: return <EvidenceControl />;
       case Menu.CONTROLE_IMPRESSAO: return <PrintControl />;
+      case Menu.MOTIVOS_NOSB: return <NosbMotifs />;
       default: return <Dashboard />;
     }
   };
@@ -36,6 +38,7 @@ const App: React.FC = () => {
       case Menu.CONTROLE_LEITURISTA: return 'Performance de Campo';
       case Menu.CONTROLE_EVIDENCIAS: return 'Auditoria de Evidências';
       case Menu.CONTROLE_IMPRESSAO: return 'Controle de Impressão';
+      case Menu.MOTIVOS_NOSB: return 'Gestão de Motivos NOSB';
       default: return 'SAL v9.0';
     }
   };
@@ -46,6 +49,7 @@ const App: React.FC = () => {
     { id: Menu.CONTROLE_LEITURISTA, label: 'Produtividade', icon: <Users size={20} /> },
     { id: Menu.CONTROLE_EVIDENCIAS, label: 'Auditoria', icon: <ImageIcon size={20} /> },
     { id: Menu.CONTROLE_IMPRESSAO, label: 'Impressão', icon: <Printer size={20} /> },
+    { id: Menu.MOTIVOS_NOSB, label: 'Motivos NOSB', icon: <ListChecks size={20} /> },
   ];
 
   return (

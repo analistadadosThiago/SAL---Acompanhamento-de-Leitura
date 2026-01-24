@@ -14,17 +14,18 @@ import {
   RotateCcw, Database, 
   ShieldAlert, ScanLine, 
   Table as TableIcon, FileDown,
-  Sparkles, RefreshCw,
   ChevronLeft, ChevronRight,
   TrendingUp,
   Printer as PrinterIcon, Zap, Users,
   Filter, ClipboardList, Target, Layers,
-  Activity
+  Activity, FileText
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { GoogleGenAI } from "@google/genai";
 import IndicatorCard from './IndicatorCard';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ITEMS_PER_PAGE = 25;
 
@@ -45,7 +46,7 @@ interface PrintState {
   filterMes: string;
   filterRz: string;
   filterMatr: string;
-  dataset: any[];
+  datasetRelatorio: any[];
   isLoaded: boolean;
   currentPage: number;
 }
@@ -55,7 +56,7 @@ const initialPrintState: PrintState = {
   filterMes: '',
   filterRz: '',
   filterMatr: '',
-  dataset: [],
+  datasetRelatorio: [],
   isLoaded: false,
   currentPage: 1
 };
@@ -95,12 +96,11 @@ const PrintControl: React.FC = () => {
 
   const currentConfig = menuConfig[activeSubMenu];
 
-  // Extração robusta de string para evitar [Object object]
-  const safeExtractString = (val: any, field: string): string => {
+  const safeExtractString = (val: any, field: string = 'rz'): string => {
     if (val === null || val === undefined) return "";
     if (typeof val === 'string') return val;
     if (typeof val === 'object') {
-      const extracted = val[field] || val.rz || val.matr || val.razao || val.razao_social || (Object.values(val)[0]);
+      const extracted = val[field] || val.rz || val.matr || val.razao || val.razao_social || val.nome || (Object.values(val)[0]);
       if (extracted === null || extracted === undefined) return "";
       return typeof extracted === 'object' ? JSON.stringify(extracted) : String(extracted);
     }
@@ -125,7 +125,6 @@ const PrintControl: React.FC = () => {
     fetchBaseFilters();
   }, []);
 
-  // Filtros dinâmicos baseados no Ano e Mês selecionados
   useEffect(() => {
     const fetchDynamicFilters = async () => {
       if (!currentState.filterAno || !currentState.filterMes) {
@@ -137,12 +136,9 @@ const PrintControl: React.FC = () => {
         const p_ano = currentState.filterAno; 
         const p_mes = currentState.filterMes;
         
-        // Convertendo ano para int para a RPC de filtros, pois estas geralmente esperam number
-        const yearInt = parseInt(p_ano);
-        
         const [resRz, resMatr] = await Promise.all([
-          supabase.rpc(RPC_FILTRO_RAZAO_CI_UI, { p_ano: yearInt, p_mes }),
-          supabase.rpc(RPC_FILTRO_MATRICULA_CI_UI, { p_ano: yearInt, p_mes })
+          supabase.rpc(RPC_FILTRO_RAZAO_CI_UI, { p_ano, p_mes }),
+          supabase.rpc(RPC_FILTRO_MATRICULA_CI_UI, { p_ano, p_mes })
         ]);
 
         const razoesLimpas = (resRz.data || []).map((i: any) => safeExtractString(i, 'rz')).filter(Boolean);
@@ -174,10 +170,9 @@ const PrintControl: React.FC = () => {
     setLoading(true); 
     setAiInsights(null);
     try {
-      // Chamada da RPC com p_ano passado como string conforme requisito (::text no BD)
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
-        p_ano: currentState.filterAno,
-        p_mes: currentState.filterMes,
+        p_ano: currentState.filterAno, 
+        p_mes: currentState.filterMes, 
         p_rz: currentState.filterRz || null, 
         p_matr: currentState.filterMatr || null,
         p_motivo: null,
@@ -186,9 +181,9 @@ const PrintControl: React.FC = () => {
       });
       
       if (error) throw error;
-      updateCurrentState({ dataset: data || [], isLoaded: true, currentPage: 1 });
+      updateCurrentState({ datasetRelatorio: data || [], isLoaded: true, currentPage: 1 });
     } catch (err) { 
-      console.error("SAL - Erro Auditoria:", err); 
+      console.error("SAL - Erro Gerar Relatório:", err); 
       alert("Falha no processamento de dados reais do banco de dados.");
     } finally { 
       setLoading(false); 
@@ -197,39 +192,46 @@ const PrintControl: React.FC = () => {
 
   const paginatedData = useMemo(() => {
     const start = (currentState.currentPage - 1) * ITEMS_PER_PAGE;
-    return currentState.dataset.slice(start, start + ITEMS_PER_PAGE);
-  }, [currentState.dataset, currentState.currentPage]);
+    return currentState.datasetRelatorio.slice(start, start + ITEMS_PER_PAGE);
+  }, [currentState.datasetRelatorio, currentState.currentPage]);
 
-  const totalPages = Math.max(1, Math.ceil(currentState.dataset.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(currentState.datasetRelatorio.length / ITEMS_PER_PAGE));
 
   const metrics = useMemo(() => {
-    const data = currentState.dataset;
-    const uniqueMatrs = new Set(data.map(i => safeExtractString(i.matr, 'matr'))).size;
-    const uniqueRzs = new Set(data.map(i => safeExtractString(i.rz || i.razao, 'rz'))).size;
+    const data = currentState.datasetRelatorio;
+    const distinctInstalacao = new Set(data.map(i => String(i.instalacao))).size;
+
+    const counts: Record<string, number> = {};
+    data.forEach(item => {
+      const motif = String(item.motivo || item[currentConfig.motivoKey] || 'N/A');
+      counts[motif] = (counts[motif] || 0) + 1;
+    });
+    
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    
     return {
-      total: data.length,
-      matrs: uniqueMatrs,
-      rzs: uniqueRzs
+      totalDistinct: distinctInstalacao,
+      maxMotif: sorted.length > 0 ? sorted[0][0] : 'N/A',
+      minMotif: sorted.length > 0 ? sorted[sorted.length - 1][0] : 'N/A'
     };
-  }, [currentState.dataset]);
+  }, [currentState.datasetRelatorio, currentConfig.motivoKey]);
 
   const quantitativoData = useMemo(() => {
     const map: Record<string, { rz: string, motivo: string, qtd: number }> = {};
-    currentState.dataset.forEach(item => {
-      const rz = safeExtractString(item.rz || item.razao, 'rz');
-      // Tenta a coluna 'motivo' genérica ou a específica do config
+    currentState.datasetRelatorio.forEach(item => {
+      const rz = safeExtractString(item.rz || item.razao, 'rz') || 'N/A';
       const motivo = String(item.motivo || item[currentConfig.motivoKey] || 'N/A');
       const key = `${rz}|${motivo}`;
       if (!map[key]) map[key] = { rz, motivo, qtd: 0 };
       map[key].qtd += 1;
     });
     return Object.values(map).sort((a, b) => b.qtd - a.qtd);
-  }, [currentState.dataset, currentConfig.motivoKey]);
+  }, [currentState.datasetRelatorio, currentConfig.motivoKey]);
 
   const chartData = useMemo(() => {
     const getTop = (keyFn: (i: any) => string) => {
       const map: Record<string, number> = {};
-      currentState.dataset.forEach(i => { const k = keyFn(i); map[k] = (map[k] || 0) + 1; });
+      currentState.datasetRelatorio.forEach(i => { const k = keyFn(i); map[k] = (map[k] || 0) + 1; });
       return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     };
     return {
@@ -239,14 +241,30 @@ const PrintControl: React.FC = () => {
       mes: getTop(i => String(i.Mes || i.mes || 'N/A')),
       ano: getTop(i => String(i.Ano || i.ano || 'N/A'))
     };
-  }, [currentState.dataset, currentConfig.motivoKey]);
+  }, [currentState.datasetRelatorio, currentConfig.motivoKey]);
+
+  const handleExportPDF = () => {
+    if (currentState.datasetRelatorio.length === 0) return;
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setFontSize(14);
+      doc.text(`SAL - Relatório de ${currentConfig.label}`, 10, 10);
+      autoTable(doc, {
+        html: '#main-report-table',
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 1 },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] }
+      });
+      doc.save(`SAL_${activeSubMenu}_${Date.now()}.pdf`);
+    } catch (err) { console.error("Erro PDF:", err); }
+  };
 
   const handleGetAiInsights = async () => {
-    if (currentState.dataset.length === 0 || loadingAi) return;
+    if (currentState.datasetRelatorio.length === 0 || loadingAi) return;
     setLoadingAi(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `Como consultor sênior do SAL v9, analise este dataset de ${currentConfig.label}: ${currentState.dataset.length} registros detectados. Ano ${currentState.filterAno}, Mês ${currentState.filterMes}. Forneça um diagnóstico executivo focado em redução de desvios de faturamento e recomendações de controle operacional. Seja direto e profissional.`;
+      const prompt = `Como analista sênior do SAL v9, analise este dataset de ${currentConfig.label}: ${currentState.datasetRelatorio.length} registros. Ano ${currentState.filterAno}, Mês ${currentState.filterMes}. Maior ocorrência: ${metrics.maxMotif}. Gere um diagnóstico profissional focado em perdas de faturamento.`;
       const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
       setAiInsights(response.text);
     } catch (err) { setAiInsights("IA indisponível no momento."); } finally { setLoadingAi(false); }
@@ -254,23 +272,22 @@ const PrintControl: React.FC = () => {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-24">
+      {/* Submenu de Navegação Interna */}
       <div className="bg-white p-3 rounded-3xl shadow-sm border border-slate-200 flex gap-3 print:hidden">
-        {Object.entries(menuConfig).map(([key, config]) => {
-          const isActive = activeSubMenu === key;
-          return (
-            <button 
-              key={key} 
-              onClick={() => { setActiveSubMenu(key as PrintSubMenu); setAiInsights(null); }} 
-              className={`flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                isActive ? 'bg-slate-950 text-white shadow-xl scale-[1.01]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              {config.icon} {config.label}
-            </button>
-          );
-        })}
+        {Object.entries(menuConfig).map(([key, config]) => (
+          <button 
+            key={key} 
+            onClick={() => { setActiveSubMenu(key as PrintSubMenu); setAiInsights(null); }} 
+            className={`flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              activeSubMenu === key ? 'bg-slate-950 text-white shadow-xl scale-[1.01]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            {config.icon} {config.label}
+          </button>
+        ))}
       </div>
 
+      {/* Seção de Filtros Dependentes */}
       <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200 print:hidden relative overflow-hidden">
         <div className="absolute top-0 left-0 w-2 h-full bg-blue-600"></div>
         <div className="flex items-center gap-4 mb-10">
@@ -289,7 +306,7 @@ const PrintControl: React.FC = () => {
               onChange={e => updateCurrentState({ filterAno: e.target.value, filterRz: '', filterMatr: '', isLoaded: false })} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
             >
-               <option value="">Selecione...</option>
+               <option value="">Selecione o Ano</option>
                {options.anos.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
@@ -300,7 +317,7 @@ const PrintControl: React.FC = () => {
               onChange={e => updateCurrentState({ filterMes: e.target.value, filterRz: '', filterMatr: '', isLoaded: false })} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
             >
-               <option value="">Selecione...</option>
+               <option value="">Selecione o Mês</option>
                {options.meses.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
           </div>
@@ -312,7 +329,7 @@ const PrintControl: React.FC = () => {
               className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all ${loadingFilters ? 'opacity-50 animate-pulse' : ''}`}
               disabled={loadingFilters || !currentState.filterAno || !currentState.filterMes}
             >
-               <option value="">Todas as Razões</option>
+               <option value="">Selecione a Razão</option>
                {options.razoes.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
@@ -324,7 +341,7 @@ const PrintControl: React.FC = () => {
               className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all ${loadingFilters ? 'opacity-50 animate-pulse' : ''}`}
               disabled={loadingFilters || !currentState.filterAno || !currentState.filterMes}
             >
-               <option value="">Todas as Matrículas</option>
+               <option value="">Selecione a Matrícula</option>
                {options.matriculas.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
@@ -350,37 +367,14 @@ const PrintControl: React.FC = () => {
 
       {currentState.isLoaded && (
         <div className="space-y-12 animate-in slide-in-from-bottom-6 duration-700">
+           {/* Cards de Indicadores do Módulo */}
            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              <IndicatorCard label="Dataset Consolidado" value={metrics.total.toLocaleString()} icon={<ClipboardList size={24}/>} color="blue" />
-              <IndicatorCard label="Agentes de Campo" value={metrics.matrs} icon={<Users size={24}/>} color="green" />
-              <IndicatorCard label="Unidades de Negócio" value={metrics.rzs} icon={<Target size={24}/>} color="amber" />
+              <IndicatorCard label="Dataset Consolidado" value={metrics.totalDistinct.toLocaleString()} icon={<ClipboardList size={24}/>} color="blue" />
+              <IndicatorCard label="Agentes de Campo – Maior Ocorrência" value={metrics.maxMotif} icon={<Users size={24}/>} color="green" />
+              <IndicatorCard label="Unidades de Negócio – Menor Ocorrência" value={metrics.minMotif} icon={<Target size={24}/>} color="amber" />
            </div>
 
-           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 print:hidden">
-              <div className="lg:col-span-4 bg-slate-900 p-12 rounded-[3.5rem] text-white flex flex-col justify-between shadow-2xl relative overflow-hidden group border border-white/5">
-                 <Sparkles className="absolute -top-10 -right-10 text-white/5 group-hover:scale-125 transition-transform duration-1000" size={240} />
-                 <div className="relative z-10">
-                    <div className="flex items-center gap-6 mb-10">
-                       <div className="p-4 bg-gradient-to-tr from-blue-600 to-indigo-700 rounded-3xl shadow-2xl shadow-blue-500/20"><Sparkles size={32} /></div>
-                       <div>
-                          <h3 className="text-2xl font-black uppercase italic tracking-tight">Análise Executiva v9.0</h3>
-                          <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] mt-1">Diagnóstico de Desvios de Faturamento</p>
-                       </div>
-                    </div>
-                    {aiInsights ? (
-                      <div className="text-slate-300 text-base leading-relaxed whitespace-pre-wrap font-medium bg-white/5 p-10 rounded-[2.5rem] border border-white/10 shadow-inner animate-in fade-in duration-500 prose prose-invert max-w-none">{aiInsights}</div>
-                    ) : (
-                      <div className="space-y-6">
-                        <p className="text-slate-400 text-sm max-w-xl font-medium">O núcleo de inteligência identificou padrões críticos no dataset atual. Deseja realizar uma consultoria preditiva?</p>
-                        <button onClick={handleGetAiInsights} disabled={loadingAi} className="px-14 py-6 bg-white text-slate-950 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all flex items-center gap-4 shadow-2xl">
-                          {loadingAi ? <RefreshCw className="animate-spin" size={20} /> : <><Sparkles size={18} /> INICIAR CONSULTORIA PREDITIVA</>}
-                        </button>
-                      </div>
-                    )}
-                 </div>
-              </div>
-           </div>
-
+           {/* Tabela Principal de Auditoria */}
            <section className="bg-white rounded-[4rem] shadow-sm border border-slate-200 overflow-hidden print-report-only">
               <div className="px-12 py-10 border-b border-slate-100 flex flex-wrap items-center justify-between gap-6 print:hidden">
                 <div className="flex items-center gap-5">
@@ -392,11 +386,14 @@ const PrintControl: React.FC = () => {
                 </div>
                 <div className="flex gap-4">
                   <button onClick={() => {
-                    const ws = XLSX.utils.json_to_sheet(currentState.dataset);
+                    const ws = XLSX.utils.json_to_sheet(currentState.datasetRelatorio);
                     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SAL_Export");
                     XLSX.writeFile(wb, `SAL_CI_${activeSubMenu}_${Date.now()}.xlsx`);
                   }} className="flex items-center gap-4 px-8 py-5 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-emerald-600/20">
                     <FileDown size={20}/> EXCEL
+                  </button>
+                  <button onClick={handleExportPDF} className="flex items-center gap-4 px-8 py-5 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-red-600/20">
+                    <FileText size={20}/> PDF TABULAR
                   </button>
                   <button onClick={() => window.print()} className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-blue-600/20">
                     <PrinterIcon size={20}/> IMPRIMIR
@@ -405,7 +402,7 @@ const PrintControl: React.FC = () => {
               </div>
               
               <div className="overflow-x-auto">
-                 <table className="w-full text-left text-[11px] border-collapse print:text-[7.5pt]">
+                 <table id="main-report-table" className="w-full text-left text-[11px] border-collapse print:text-[7.5pt]">
                     <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
                        <tr>
                          <th className="px-6 py-6 border-x border-slate-100 print:border-black text-center">MES</th>
@@ -425,30 +422,31 @@ const PrintControl: React.FC = () => {
                     <tbody className="divide-y divide-slate-100 bg-white">
                        {paginatedData.map((r, i) => (
                           <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="px-6 py-5 border-x border-slate-50 text-center uppercase font-bold">{r.Mes || r.mes}</td>
-                            <td className="px-6 py-5 border-x border-slate-50 text-center">{r.Ano || r.ano}</td>
-                            <td className="px-6 py-5 border-x border-slate-50 font-bold text-slate-900 uppercase whitespace-nowrap">{safeExtractString(r.rz || r.razao, 'rz')}</td>
+                            <td className="px-6 py-5 border-x border-slate-50 text-center uppercase font-bold">{r.mes}</td>
+                            <td className="px-6 py-5 border-x border-slate-50 text-center">{r.ano}</td>
+                            <td className="px-6 py-5 border-x border-slate-50 font-bold text-slate-900 uppercase whitespace-nowrap">{r.rz}</td>
                             <td className="px-6 py-5 border-x border-slate-50 text-center">{r.rz_ul_lv}</td>
                             <td className="px-6 py-5 border-x border-slate-50 font-mono text-blue-600 font-bold">{r.instalacao}</td>
                             <td className="px-6 py-5 border-x border-slate-50 font-mono">{r.medidor}</td>
                             <td className="px-6 py-5 border-x border-slate-50 text-center uppercase">{r.reg}</td>
                             <td className="px-6 py-5 border-x border-slate-50">{r.tipo}</td>
-                            <td className="px-6 py-5 border-x border-slate-50 font-bold">{safeExtractString(r.matr, 'matr')}</td>
+                            <td className="px-6 py-5 border-x border-slate-50 font-bold">{r.matr}</td>
                             <td className="px-6 py-5 border-x border-slate-50 text-center">
                               <span className="bg-slate-100 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-700">{r.nl}</span>
                             </td>
                             <td className="px-6 py-5 border-x border-slate-50 text-right font-black text-slate-900">{r.l_atual}</td>
-                            <td className="px-6 py-5 border-x border-slate-50 font-black italic text-blue-800 bg-blue-50/20">{r.motivo || r[currentConfig.motivoKey]}</td>
+                            <td className="px-6 py-5 border-x border-slate-50 font-black italic text-blue-800 bg-blue-50/20">{r.motivo}</td>
                           </tr>
                        ))}
-                       {currentState.dataset.length === 0 && (
-                         <tr><td colSpan={12} className="py-32 text-center text-slate-300 font-black uppercase tracking-[0.3em] italic">Nenhum dado encontrado</td></tr>
+                       {currentState.datasetRelatorio.length === 0 && (
+                         <tr><td colSpan={12} className="py-32 text-center text-slate-300 font-black uppercase tracking-[0.3em] italic">Nenhum registro encontrado</td></tr>
                        )}
                     </tbody>
                  </table>
               </div>
+              {/* Paginação */}
               <div className="px-12 py-8 bg-slate-50 border-t flex items-center justify-between print:hidden">
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Exibindo registros {(currentState.currentPage-1)*ITEMS_PER_PAGE + 1} a {Math.min(currentState.currentPage*ITEMS_PER_PAGE, currentState.dataset.length)} de {currentState.dataset.length}</span>
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Página {currentState.currentPage} de {totalPages}</span>
                 <div className="flex gap-4">
                    <button onClick={() => updateCurrentState({ currentPage: Math.max(1, currentState.currentPage - 1) })} disabled={currentState.currentPage === 1} className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:bg-white hover:border-blue-600 transition-all disabled:opacity-30"><ChevronLeft size={20}/></button>
                    <button onClick={() => updateCurrentState({ currentPage: Math.min(totalPages, currentState.currentPage + 1) })} disabled={currentState.currentPage >= totalPages} className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:bg-white hover:border-blue-600 transition-all disabled:opacity-30"><ChevronRight size={20}/></button>
@@ -456,6 +454,7 @@ const PrintControl: React.FC = () => {
               </div>
            </section>
 
+           {/* Relação Quantitativa de Desvios */}
            <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden">
              <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
                <Layers size={22} className="text-blue-600" />
@@ -466,73 +465,99 @@ const PrintControl: React.FC = () => {
                  <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest">
                    <tr>
                      <th className="px-6 py-4 border border-slate-100 text-left">RAZÃO SOCIAL</th>
-                     <th className="px-6 py-4 border border-slate-100 text-left">NÃO IMPRESSÃO (MOTIVO)</th>
+                     <th className="px-6 py-4 border border-slate-100 text-left">NÃO IMPRESSÃO</th>
                      <th className="px-6 py-4 border border-slate-100 text-right">QUANTIDADE</th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
-                   {quantitativoData.map((item, idx) => (
+                   {quantitativoData.slice(0, 100).map((item, idx) => (
                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
                        <td className="px-6 py-4 border-x border-slate-50 font-bold uppercase">{item.rz}</td>
                        <td className="px-6 py-4 border-x border-slate-50 text-blue-600 italic font-medium">{item.motivo}</td>
                        <td className="px-6 py-4 border-x border-slate-50 text-right font-black text-slate-900">{item.qtd}</td>
                      </tr>
                    ))}
-                   {quantitativoData.length === 0 && (
-                     <tr><td colSpan={3} className="py-10 text-center text-slate-400 font-bold uppercase">Sem dados quantitativos</td></tr>
-                   )}
                  </tbody>
                </table>
              </div>
            </section>
 
-           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-              <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-slate-200">
-                 <div className="flex items-center justify-between mb-12">
-                   <h3 className="text-base font-black uppercase text-slate-900 flex items-center gap-4">
-                     <TrendingUp className="text-blue-600" size={26}/> Top 10 Ocorrências por Motivo
-                   </h3>
-                 </div>
-                 <div className="h-[450px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={chartData.motivo} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 900}} interval={0} />
-                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                          <Tooltip cursor={{fill: '#f8fafc', radius: 15}} contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '24px', fontSize: '11px', fontWeight: 'bold'}} />
-                          <Bar dataKey="value" fill="#2563eb" radius={[15, 15, 0, 0]} barSize={50}>
-                             {chartData.motivo.map((_, index) => <Cell key={`cell-${index}`} fillOpacity={1 - (index * 0.05)} />)}
-                             <LabelList dataKey="value" position="top" style={{fill: '#0f172a', fontSize: '12px', fontWeight: '900'}} offset={15}/>
-                          </Bar>
-                       </BarChart>
-                    </ResponsiveContainer>
-                 </div>
-              </section>
-              <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-slate-200">
-                 <div className="flex items-center justify-between mb-12">
-                   <h3 className="text-base font-black uppercase text-slate-900 flex items-center gap-4">
-                     <Users className="text-slate-950" size={26}/> Desempenho por Agente de Campo
-                   </h3>
-                 </div>
-                 <div className="h-[450px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={chartData.matr} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 900}} interval={0} />
-                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                          <Tooltip cursor={{fill: '#f8fafc', radius: 15}} contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '24px', fontSize: '11px', fontWeight: 'bold'}} />
-                          <Bar dataKey="value" fill="#0f172a" radius={[15, 15, 0, 0]} barSize={50}>
-                             {chartData.matr.map((_, index) => <Cell key={`cell-${index}`} fillOpacity={1 - (index * 0.05)} />)}
-                             <LabelList dataKey="value" position="top" style={{fill: '#1e293b', fontSize: '12px', fontWeight: '900'}} offset={15}/>
-                          </Bar>
-                       </BarChart>
-                    </ResponsiveContainer>
-                 </div>
-              </section>
+           {/* Gráficos Comparativos */}
+           <div className="space-y-12">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-slate-200">
+                   <h3 className="text-base font-black uppercase text-slate-900 mb-8 flex items-center gap-3"><TrendingUp className="text-blue-600" size={22}/> Comparativo por Motivo</h3>
+                   <div className="h-[400px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={chartData.motivo}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700}} interval={0} />
+                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                            <Tooltip contentStyle={{borderRadius: '16px'}} />
+                            <Bar dataKey="value" fill="#2563eb" radius={[10, 10, 0, 0]}>
+                               {chartData.motivo.map((_, index) => <Cell key={`cell-${index}`} fillOpacity={1 - (index * 0.05)} />)}
+                            </Bar>
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+                </section>
+                <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-slate-200">
+                   <h3 className="text-base font-black uppercase text-slate-900 mb-8 flex items-center gap-3"><Users className="text-slate-950" size={22}/> Ocorrências por Matrícula</h3>
+                   <div className="h-[400px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={chartData.matr}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700}} interval={0} />
+                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                            <Tooltip contentStyle={{borderRadius: '16px'}} />
+                            <Bar dataKey="value" fill="#0f172a" radius={[10, 10, 0, 0]} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+                </section>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200">
+                   <h3 className="text-sm font-black uppercase text-slate-900 mb-8">Por Razão Social</h3>
+                   <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={chartData.razao} layout="vertical">
+                            <XAxis type="number" hide />
+                            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700}} width={100} />
+                            <Bar dataKey="value" fill="#3b82f6" radius={[0, 8, 8, 0]} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+                </section>
+                <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200">
+                   <h3 className="text-sm font-black uppercase text-slate-900 mb-8">Por Mês</h3>
+                   <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={chartData.mes}>
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+                            <Bar dataKey="value" fill="#2563eb" radius={[8, 8, 0, 0]} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+                </section>
+                <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200">
+                   <h3 className="text-sm font-black uppercase text-slate-900 mb-8">Por Ano</h3>
+                   <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={chartData.ano}>
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+                            <Bar dataKey="value" fill="#1e40af" radius={[8, 8, 0, 0]} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+                </section>
+              </div>
            </div>
         </div>
       )}
 
+      {/* Loading de Alta Fidelidade */}
       {loading && (
         <div className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-3xl flex items-center justify-center animate-in fade-in duration-500">
            <div className="bg-white p-24 rounded-[5rem] shadow-2xl flex flex-col items-center gap-10 text-center border border-white/20">
