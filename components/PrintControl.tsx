@@ -13,17 +13,13 @@ import {
   ShieldAlert, ScanLine, 
   Table as TableIcon, FileDown,
   ChevronLeft, ChevronRight,
-  TrendingUp,
-  Printer as PrinterIcon, Zap, Users,
-  Filter, ClipboardList, Target, Layers,
-  Activity, FileText
+  Printer as PrinterIcon, Zap,
+  Filter, ClipboardList, Target,
+  Activity, CheckCircle2,
+  Loader2
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { GoogleGenAI } from "@google/genai";
 import IndicatorCard from './IndicatorCard';
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 const ITEMS_PER_PAGE = 25;
 
@@ -42,8 +38,9 @@ interface PrintState {
   filterMes: string;
   filterRz: string;
   filterMatr: string;
-  datasetRelatorio: any[];
-  isLoaded: boolean;
+  technicalBase: any[]; // Tabela Técnica Oculta
+  baseCarregada: boolean; 
+  relatorioExecutado: boolean;
   currentPage: number;
 }
 
@@ -52,20 +49,16 @@ const initialPrintState: PrintState = {
   filterMes: '',
   filterRz: '',
   filterMatr: '',
-  datasetRelatorio: [],
-  isLoaded: false,
+  technicalBase: [],
+  baseCarregada: false,
+  relatorioExecutado: false,
   currentPage: 1
 };
 
 const PrintControl: React.FC = () => {
   const [activeSubMenu, setActiveSubMenu] = useState<PrintSubMenu>(PrintSubMenu.NOSB_IMPEDIMENTO);
-  const [loading, setLoading] = useState(false);
-  const [loadingAi, setLoadingAi] = useState(false);
-  const [aiInsights, setAiInsights] = useState<string | null>(null);
-
-  const [options, setOptions] = useState<FilterOptions>({ 
-    anos: [], meses: []
-  });
+  const [loadingBase, setLoadingBase] = useState(false);
+  const [options, setOptions] = useState<FilterOptions>({ anos: [], meses: [] });
   
   const [states, setStates] = useState<Record<PrintSubMenu, PrintState>>({
     [PrintSubMenu.NOSB_IMPEDIMENTO]: { ...initialPrintState },
@@ -91,22 +84,18 @@ const PrintControl: React.FC = () => {
 
   const currentConfig = menuConfig[activeSubMenu];
 
+  // Extração de valores (Case-Insensitive)
   const safeExtractString = (val: any, field: string): string => {
     if (!val) return "";
-    const key = Object.keys(val).find(k => k.toLowerCase() === field.toLowerCase());
-    const result = key ? val[key] : (val.rz || val.RZ || val.razao || val.matr || val.MATR || "");
-    return String(result).trim();
+    const possibleKeys = [field.toLowerCase(), field.toUpperCase(), field];
+    const key = Object.keys(val).find(k => possibleKeys.includes(k));
+    if (!key) {
+       if (field === 'rz') return String(val.rz || val.RZ || val.razao || val.razao_social || "").trim();
+       if (field === 'matr') return String(val.matr || val.MATR || val.matricula || "").trim();
+    }
+    return key ? String(val[key]).trim() : "";
   };
 
-  // Derived Dynamic Filter Options
-  const dynamicOptions = useMemo(() => {
-    const dataset = currentState.datasetRelatorio || [];
-    const razoes = Array.from(new Set(dataset.map(i => safeExtractString(i, 'rz')))).filter(Boolean).sort();
-    const matriculas = Array.from(new Set(dataset.map(i => safeExtractString(i, 'matr')))).filter(Boolean).sort();
-    return { razoes, matriculas };
-  }, [currentState.datasetRelatorio]);
-
-  // Carrega Anos e Meses Iniciais
   useEffect(() => {
     const fetchBaseFilters = async () => {
       try {
@@ -120,7 +109,7 @@ const PrintControl: React.FC = () => {
           .sort((a: string, b: string) => (MONTH_ORDER[a] || 0) - (MONTH_ORDER[b] || 0))
           .map((m: string) => ({ label: m, value: m }));
         setOptions({ anos: anosList, meses: mesesList });
-      } catch (err) { console.error("SAL - Erro filtros base:", err); }
+      } catch (err) { console.error("Erro filtros base:", err); }
     };
     fetchBaseFilters();
   }, []);
@@ -129,50 +118,55 @@ const PrintControl: React.FC = () => {
     setStates(prev => ({ ...prev, [activeSubMenu]: { ...prev[activeSubMenu], ...updates } }));
   };
 
-  const handleGerarRelatorio = async () => {
+  const handleSincronizarBaseTecnica = async () => {
     if (!currentState.filterAno || !currentState.filterMes) return;
-    
-    setLoading(true); 
-    setAiInsights(null);
+    setLoadingBase(true); 
     try {
       const { data, error } = await supabase.rpc(currentConfig.rpc, {
         p_ano: currentState.filterAno, 
         p_mes: currentState.filterMes, 
         p_rz: null, 
-        p_matr: null,
-        p_motivo: null,
-        p_limit: 1000000,
-        p_offset: 0
+        p_matr: null
       });
-      
       if (error) throw error;
-      const fullDataset = data || [];
-      updateCurrentState({ datasetRelatorio: fullDataset, isLoaded: true, currentPage: 1 });
+      updateCurrentState({ 
+        technicalBase: data || [], 
+        baseCarregada: true, 
+        relatorioExecutado: false 
+      });
     } catch (err) { 
-      console.error("SAL - Erro Gerar Relatório:", err); 
-      updateCurrentState({ isLoaded: false });
+      updateCurrentState({ baseCarregada: false, technicalBase: [] });
     } finally { 
-      setLoading(false); 
+      setLoadingBase(false); 
     }
   };
 
-  // GATILHO DE CARGA AUTOMÁTICA OBRIGATÓRIO (V9.2)
   useEffect(() => {
-    const shouldLoad = currentState.filterAno && currentState.filterMes && !currentState.isLoaded && !loading;
-    if (shouldLoad) {
-      handleGerarRelatorio();
+    if (currentState.filterAno && currentState.filterMes && !currentState.baseCarregada && !loadingBase) {
+      handleSincronizarBaseTecnica();
     }
-  }, [currentState.filterAno, currentState.filterMes, currentState.isLoaded, activeSubMenu]);
+  }, [currentState.filterAno, currentState.filterMes, currentState.baseCarregada, activeSubMenu]);
+
+  const dynamicOptions = useMemo(() => {
+    const dataset = currentState.technicalBase || [];
+    const razoes = Array.from(new Set(dataset.map(i => safeExtractString(i, 'rz')))).filter(Boolean).sort();
+    const matriculas = Array.from(new Set(dataset.map(i => safeExtractString(i, 'matr')))).filter(Boolean).sort();
+    return { razoes, matriculas };
+  }, [currentState.technicalBase]);
+
+  const handleGerarRelatorio = () => {
+    if (currentState.baseCarregada) {
+      updateCurrentState({ relatorioExecutado: true });
+    }
+  };
 
   const filteredData = useMemo(() => {
-    return currentState.datasetRelatorio.filter(item => {
-      const itemRz = safeExtractString(item, 'rz');
-      const itemMatr = safeExtractString(item, 'matr');
-      const matchRz = !currentState.filterRz || itemRz === currentState.filterRz;
-      const matchMatr = !currentState.filterMatr || itemMatr === currentState.filterMatr;
+    return currentState.technicalBase.filter(item => {
+      const matchRz = !currentState.filterRz || safeExtractString(item, 'rz') === currentState.filterRz;
+      const matchMatr = !currentState.filterMatr || safeExtractString(item, 'matr') === currentState.filterMatr;
       return matchRz && matchMatr;
     });
-  }, [currentState.datasetRelatorio, currentState.filterRz, currentState.filterMatr]);
+  }, [currentState.technicalBase, currentState.filterRz, currentState.filterMatr]);
 
   const paginatedData = useMemo(() => {
     const start = (currentState.currentPage - 1) * ITEMS_PER_PAGE;
@@ -182,59 +176,39 @@ const PrintControl: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
 
   const metrics = useMemo(() => {
-    const data = filteredData;
-    const distinctInstalacao = new Set(data.map(i => String(i.instalacao))).size;
     const counts: Record<string, number> = {};
-    data.forEach(item => {
+    filteredData.forEach(item => {
       const motif = String(item.motivo || item[currentConfig.motivoKey] || 'N/A');
       counts[motif] = (counts[motif] || 0) + 1;
     });
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     return {
-      totalDistinct: distinctInstalacao,
       maxMotif: sorted.length > 0 ? sorted[0][0] : 'N/A',
       minMotif: sorted.length > 0 ? sorted[sorted.length - 1][0] : 'N/A'
     };
   }, [filteredData, currentConfig.motivoKey]);
 
-  const chartData = useMemo(() => {
-    const getTop = (keyFn: (i: any) => string) => {
-      const map: Record<string, number> = {};
-      filteredData.forEach(i => { const k = keyFn(i); map[k] = (map[k] || 0) + 1; });
-      return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
-    };
-    return {
-      motivo: getTop(i => String(i.motivo || i[currentConfig.motivoKey] || 'N/A')),
-      razao: getTop(i => safeExtractString(i, 'rz') || 'N/A'),
-      matr: getTop(i => safeExtractString(i, 'matr') || 'N/A')
-    };
-  }, [filteredData, currentConfig.motivoKey]);
-
-  const handleExportPDF = () => {
-    if (filteredData.length === 0) return;
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      doc.setFontSize(14);
-      doc.text(`SAL - Relatório de ${currentConfig.label}`, 10, 10);
-      autoTable(doc, {
-        html: '#main-report-table',
-        theme: 'grid',
-        styles: { fontSize: 7, cellPadding: 1 },
-        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] }
-      });
-      doc.save(`SAL_${activeSubMenu}_${Date.now()}.pdf`);
-    } catch (err) { console.error("Erro PDF:", err); }
-  };
-
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-24">
+      {/* 1. TABELA TÉCNICA (OCULTA) - SUPORTE MATERIALIZAÇÃO */}
+      <div id="technical-base-print" aria-hidden="true" className="hidden sr-only">
+        <table>
+          <thead><tr><th>RZ</th><th>MATR</th><th>RPC</th></tr></thead>
+          <tbody>
+            {currentState.technicalBase.slice(0, 100).map((r, i) => (
+              <tr key={i}><td>{safeExtractString(r, 'rz')}</td><td>{safeExtractString(r, 'matr')}</td><td>{currentConfig.rpc}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="bg-white p-3 rounded-3xl shadow-sm border border-slate-200 flex gap-3 print:hidden">
         {Object.entries(menuConfig).map(([key, config]) => (
           <button 
             key={key} 
-            onClick={() => { setActiveSubMenu(key as PrintSubMenu); setAiInsights(null); }} 
+            onClick={() => { setActiveSubMenu(key as PrintSubMenu); }} 
             className={`flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-              activeSubMenu === key ? 'bg-slate-950 text-white shadow-xl scale-[1.01]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+              activeSubMenu === key ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
             {config.icon} {config.label}
@@ -247,8 +221,8 @@ const PrintControl: React.FC = () => {
         <div className="flex items-center gap-4 mb-10">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Filter size={20} /></div>
           <div>
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Parâmetros Operacionais</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Base de Dados Vinculada (Carga Automática v9.2)</p>
+            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight italic">Parâmetros Operacionais v9</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronização de Base de Filtros</p>
           </div>
         </div>
         
@@ -257,7 +231,7 @@ const PrintControl: React.FC = () => {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">1. Ano</label>
             <select 
               value={currentState.filterAno} 
-              onChange={e => updateCurrentState({ filterAno: e.target.value, filterRz: '', filterMatr: '', isLoaded: false, datasetRelatorio: [] })} 
+              onChange={e => updateCurrentState({ filterAno: e.target.value, filterRz: '', filterMatr: '', baseCarregada: false, relatorioExecutado: false, technicalBase: [] })} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
             >
                <option value="">Selecione</option>
@@ -268,7 +242,7 @@ const PrintControl: React.FC = () => {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">2. Mês</label>
             <select 
               value={currentState.filterMes} 
-              onChange={e => updateCurrentState({ filterMes: e.target.value, filterRz: '', filterMatr: '', isLoaded: false, datasetRelatorio: [] })} 
+              onChange={e => updateCurrentState({ filterMes: e.target.value, filterRz: '', filterMatr: '', baseCarregada: false, relatorioExecutado: false, technicalBase: [] })} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
             >
                <option value="">Selecione</option>
@@ -280,10 +254,10 @@ const PrintControl: React.FC = () => {
             <select 
               value={currentState.filterRz} 
               onChange={e => updateCurrentState({ filterRz: e.target.value, currentPage: 1 })} 
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
-              disabled={loading || !currentState.isLoaded}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer disabled:opacity-30"
+              disabled={loadingBase || !currentState.baseCarregada}
             >
-               <option value="">{loading ? "Carregando..." : currentState.isLoaded ? "Todas as Razões" : "Aguardando Ano/Mês..."}</option>
+               <option value="">{loadingBase ? "Carregando..." : currentState.baseCarregada ? "Todas as Razões" : "Aguardando Mês/Ano..."}</option>
                {dynamicOptions.razoes.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
@@ -292,41 +266,48 @@ const PrintControl: React.FC = () => {
             <select 
               value={currentState.filterMatr} 
               onChange={e => updateCurrentState({ filterMatr: e.target.value, currentPage: 1 })} 
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
-              disabled={loading || !currentState.isLoaded}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer disabled:opacity-30"
+              disabled={loadingBase || !currentState.baseCarregada}
             >
-               <option value="">{loading ? "Carregando..." : currentState.isLoaded ? "Todas as Matrículas" : "Aguardando Ano/Mês..."}</option>
+               <option value="">{loadingBase ? "Carregando..." : currentState.baseCarregada ? "Todas as Matrículas" : "Aguardando Mês/Ano..."}</option>
                {dynamicOptions.matriculas.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
         </div>
 
-        <div className="mt-12 flex justify-center gap-6">
-           <button 
-             onClick={handleGerarRelatorio} 
-             disabled={loading || !currentState.filterAno || !currentState.filterMes} 
-             className="px-20 py-5 bg-slate-950 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20 flex items-center gap-4"
-           >
-              {loading ? <Activity className="animate-spin" size={18} /> : <Database size={18} fill="currentColor" />}
-              FORÇAR RECARGA
-           </button>
-           <button 
-             onClick={() => {
-                updateCurrentState({ ...initialPrintState });
-             }} 
-             className="px-12 py-5 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-slate-200 transition-all"
-           >
-             <RotateCcw size={16} /> REINICIAR
-           </button>
+        <div className="mt-12 flex flex-col items-center gap-4">
+           {loadingBase && (
+              <div className="flex items-center gap-3 text-blue-600 font-bold text-[9px] uppercase animate-pulse">
+                <Activity size={14} className="animate-spin"/> Materializando Base Técnica v9...
+              </div>
+           )}
+           {currentState.baseCarregada && !loadingBase && (
+              <div className="flex items-center gap-3 text-green-600 font-bold text-[9px] uppercase">
+                <CheckCircle2 size={14} /> Filtros Ativados ({currentState.technicalBase.length} registros)
+              </div>
+           )}
+           <div className="flex gap-6">
+             <button 
+               onClick={handleGerarRelatorio} 
+               disabled={!currentState.baseCarregada || loadingBase} 
+               className="px-24 py-5 bg-slate-950 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20 flex items-center gap-4"
+             >
+                <Zap size={18} fill="currentColor" />
+                GERAR RELATÓRIO
+             </button>
+             <button onClick={() => updateCurrentState({ ...initialPrintState })} className="px-12 py-5 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-slate-200 transition-all">
+               <RotateCcw size={16} /> REINICIAR
+             </button>
+           </div>
         </div>
       </section>
 
-      {currentState.isLoaded && !loading && (
+      {currentState.relatorioExecutado && (
         <div className="space-y-12 animate-in slide-in-from-bottom-6 duration-700">
            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              <IndicatorCard label="Dataset Atual" value={filteredData.length.toLocaleString()} icon={<ClipboardList size={24}/>} color="blue" />
-              <IndicatorCard label="Destaque Crítico" value={metrics.maxMotif} icon={<Users size={24}/>} color="green" />
-              <IndicatorCard label="Frequência Mínima" value={metrics.minMotif} icon={<Target size={24}/>} color="amber" />
+              <IndicatorCard label="Dataset Analítico" value={filteredData.length.toLocaleString()} icon={<ClipboardList size={24}/>} color="blue" />
+              <IndicatorCard label="Principal Ocorrência" value={metrics.maxMotif} icon={<Target size={24}/>} color="green" />
+              <IndicatorCard label="Menor Incidência" value={metrics.minMotif} icon={<Activity size={24}/>} color="amber" />
            </div>
 
            <section className="bg-white rounded-[4rem] shadow-sm border border-slate-200 overflow-hidden print-report-only">
@@ -334,20 +315,17 @@ const PrintControl: React.FC = () => {
                 <div className="flex items-center gap-5">
                   <div className="p-4 bg-slate-900 text-white rounded-2xl shadow-xl"><TableIcon size={24} /></div>
                   <div>
-                    <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight">Dataset de Auditoria</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Visualização Paginada: {filteredData.length} registros</p>
+                    <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic">Relatório de Auditoria Materializado</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fonte: {currentConfig.label}</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
                   <button onClick={() => {
                     const ws = XLSX.utils.json_to_sheet(filteredData);
-                    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SAL_Export");
-                    XLSX.writeFile(wb, `SAL_CI_${activeSubMenu}_${Date.now()}.xlsx`);
+                    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SAL_CI");
+                    XLSX.writeFile(wb, `SAL_CI_${activeSubMenu}.xlsx`);
                   }} className="flex items-center gap-4 px-8 py-5 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
                     <FileDown size={20}/> EXCEL
-                  </button>
-                  <button onClick={handleExportPDF} className="flex items-center gap-4 px-8 py-5 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20">
-                    <FileText size={20}/> PDF
                   </button>
                   <button onClick={() => window.print()} className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
                     <PrinterIcon size={20}/> IMPRIMIR
@@ -404,10 +382,15 @@ const PrintControl: React.FC = () => {
         </div>
       )}
 
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-40 animate-pulse">
-           <Activity className="animate-spin text-blue-600 mb-6" size={60} />
-           <p className="text-sm font-black text-slate-900 uppercase tracking-[0.3em]">Sincronizando Base de Dados...</p>
+      {loadingBase && (
+        <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-white p-20 rounded-[50px] shadow-2xl flex flex-col items-center gap-6">
+             <Loader2 className="animate-spin text-blue-600" size={40} />
+             <div className="text-center">
+               <h2 className="text-xl font-black uppercase text-slate-900">Sincronização Neural</h2>
+               <p className="text-[9px] font-bold text-blue-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Materializando Base Técnica v9...</p>
+             </div>
+          </div>
         </div>
       )}
     </div>

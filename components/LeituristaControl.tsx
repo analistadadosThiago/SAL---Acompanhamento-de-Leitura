@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
@@ -10,7 +9,7 @@ import {
 import { 
   Users, Play, FileSpreadsheet, FileText, ChevronLeft, ChevronRight, 
   Hash, LayoutList, Activity, TrendingUp, Database,
-  Calendar, Filter, RotateCcw, AlertCircle, Map, Home, Tent, AlertTriangle, ListFilter, X, Info, Check, ChevronDown
+  Calendar, Filter, RotateCcw, AlertCircle, Map, Home, Tent, AlertTriangle, ListFilter, X, Info, Check, ChevronDown, BarChart3
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -49,15 +48,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     const data = payload[0].payload;
     return (
       <div className="bg-white p-4 rounded-xl shadow-2xl border border-slate-100 text-[11px]">
-        <p className="font-black text-slate-900 mb-2 border-b pb-1 uppercase">{label}</p>
+        <p className="font-black text-slate-900 mb-2 border-b pb-1 uppercase">{data.groupLabel}: {label}</p>
         <div className="space-y-1">
-          <p><span className="font-bold text-slate-500 uppercase">Razão:</span> <span className="text-black">{data.razao || label}</span></p>
-          <p><span className="font-bold text-slate-500 uppercase">Leit. Urb:</span> <span className="text-black">{data.leit_urb || 0}</span></p>
-          <p><span className="font-bold text-slate-500 uppercase">Leit. Pov:</span> <span className="text-black">{data.leit_povoado || 0}</span></p>
-          <p><span className="font-bold text-slate-500 uppercase">Leit. Rur:</span> <span className="text-black">{data.leit_rural || 0}</span></p>
-          <p className="pt-1 border-t"><span className="font-bold text-slate-500 uppercase">Leit. Total:</span> <span className="text-black font-black">{data.leit_total || 0}</span></p>
-          <p className="pt-1 border-t"><span className="font-bold text-red-500 uppercase">IMPEDIMENTOS:</span> <span className="text-red-700 font-black">{data.value || 0}</span></p>
-          <p><span className="font-bold text-slate-500 uppercase">INDICADOR:</span> <span className="text-black font-black">{(data.indicador || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span></p>
+          {data.razao && data.groupKey !== 'razao' && <p><span className="font-bold text-slate-500 uppercase">Razão:</span> <span className="text-black">{data.razao}</span></p>}
+          <p className="pt-1 border-t"><span className="font-bold text-red-500 uppercase">IMPEDIMENTOS:</span> <span className="text-red-700 font-black">{data.impedimentos || 0}</span></p>
+          {data.indicador !== undefined && <p><span className="font-bold text-slate-500 uppercase">INDICADOR MÉDIO:</span> <span className="text-black font-black">{(data.indicador || 0).toFixed(2)}%</span></p>}
         </div>
       </div>
     );
@@ -147,7 +142,9 @@ const LeituristaControl: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'completo' | 'razao'>('completo');
-  const [chartDimension, setChartDimension] = useState<'ano' | 'mes' | 'razao' | 'matr' | 'tipo'>('matr');
+
+  // Nova aba de agrupamento para o gráfico
+  const [chartGrouping, setChartGrouping] = useState<'matr' | 'razao' | 'mes'>('matr');
 
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertItems, setAlertItems] = useState<any[]>([]);
@@ -224,8 +221,6 @@ const LeituristaControl: React.FC = () => {
         indicador: (item.impedimentos / (item.leit_total || 1)) * 100
       }));
 
-      console.log("SAL_DEBUG: Dados Processados Controle Leiturista:", finalTabela.length);
-      
       setDadosTabela(finalTabela);
       setDadosGrafico(rawCombinedGrafico);
       setHasGenerated(true);
@@ -297,6 +292,98 @@ const LeituristaControl: React.FC = () => {
     }), { urb: 0, pov: 0, rur: 0, imp: 0 });
   }, [dadosTabela]);
 
+  // Gráfico de Impedimentos REAGRUPADO NO FRONTEND conforme chartGrouping
+  const chartData = useMemo(() => {
+    const grouped: Record<string, { key: string, impedimentos: number, razao?: string, indicador: number, count: number }> = {};
+    
+    dadosTabela.forEach(item => {
+      let groupKey = '';
+      if (chartGrouping === 'matr') groupKey = item.matr;
+      else if (chartGrouping === 'razao') groupKey = item.razao;
+      else if (chartGrouping === 'mes') groupKey = item.mes;
+
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = { 
+          key: groupKey, 
+          impedimentos: item.impedimentos, 
+          razao: item.razao, 
+          indicador: item.indicador,
+          count: 1
+        };
+      } else {
+        grouped[groupKey].impedimentos += item.impedimentos;
+        grouped[groupKey].indicador += item.indicador;
+        grouped[groupKey].count += 1;
+      }
+    });
+
+    return Object.values(grouped)
+      .map(g => ({
+        name: g.key,
+        impedimentos: g.impedimentos,
+        razao: g.razao,
+        indicador: g.indicador / g.count,
+        groupKey: chartGrouping,
+        groupLabel: chartGrouping === 'matr' ? 'Matrícula' : chartGrouping === 'razao' ? 'Razão' : 'Mês'
+      }))
+      .sort((a, b) => b.impedimentos - a.impedimentos)
+      .slice(0, 15);
+  }, [dadosTabela, chartGrouping]);
+
+  const exportToExcel = () => {
+    if (currentTableData.length === 0) return;
+    const dataToExport = currentTableData.map(row => ({
+      "ANO": row.ano,
+      "MÊS": row.mes.toUpperCase(),
+      "RAZÃO SOCIAL": row.razao,
+      "UL": row.ul || '-',
+      "MATRÍCULA": row.matr,
+      "URBANO": row.leit_urb,
+      "POVOADO": row.leit_povoado,
+      "RURAL": row.leit_rural,
+      "TOTAL": row.leit_total,
+      "IMPEDIMENTOS": row.impedimentos,
+      "INDICADOR (%)": `${row.indicador.toFixed(2)}%`
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Relatório Impedimentos");
+    XLSX.writeFile(wb, "SAL_Relatorio_Leiturista.xlsx");
+  };
+
+  const exportToPDF = () => {
+    if (currentTableData.length === 0) return;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    
+    const tableColumn = ["ANO", "MES", "RAZÃO", "UL", "MATR", "URB", "POV", "RUR", "TOTAL", "IMP", "INDICADOR"];
+    const tableRows = currentTableData.map(row => [
+      row.ano, 
+      row.mes.toUpperCase(), 
+      row.razao, 
+      row.ul || '-', 
+      row.matr,
+      row.leit_urb, 
+      row.leit_povoado, 
+      row.leit_rural,
+      row.leit_total, 
+      row.impedimentos, 
+      `${row.indicador.toFixed(2)}%`
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1 },
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
+    });
+
+    doc.setFontSize(14);
+    doc.text("SAL - Relatório de Impedimentos", 14, 15);
+    doc.save("SAL_Relatorio_Leiturista.pdf");
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 relative">
       {isAlertModalOpen && (
@@ -316,7 +403,7 @@ const LeituristaControl: React.FC = () => {
                        <tbody className="divide-y divide-slate-100">
                           {alertItems.slice(0, 50).map((item, idx) => (
                              <tr key={idx} className="text-xs">
-                                <td className="px-6 py-4 font-bold">{item.matr}</td>
+                                <td className="px-6 py-4 font-bold text-black">{item.matr}</td>
                                 <td className="px-6 py-4 text-slate-600">{item.razao}</td>
                                 <td className="px-6 py-4 text-center font-black text-red-700">{item.indicador.toFixed(2)}%</td>
                              </tr>
@@ -336,8 +423,26 @@ const LeituristaControl: React.FC = () => {
           <div className="space-y-2"><label className="text-[11px] font-bold text-black uppercase">Ano</label><select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4">{options.anos.map(a => <option key={a} value={a}>{a}</option>)}<option value="">Todos</option></select></div>
           <div className="space-y-2"><label className="text-[11px] font-bold text-black uppercase">Meses</label><MonthMultiSelect options={options.meses} selected={filterMeses} onToggle={toggleMonth} onToggleAll={toggleAllMonths} /></div>
           <div className="space-y-2"><label className="text-[11px] font-bold text-black uppercase">Matrícula</label><select value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4"><option value="">Todas</option>{options.matriculas.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-          <div className="space-y-2"><label className="text-[11px] font-bold text-black uppercase">UL DE</label><input type="text" value={filterUlDe} onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, ''))} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4" /></div>
-          <div className="space-y-2"><label className="text-[11px] font-bold text-black uppercase">UL PARA</label><input type="text" value={filterUlPara} onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, ''))} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4" /></div>
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-black uppercase">UL DE</label>
+            <input 
+              type="text" 
+              value={filterUlDe} 
+              maxLength={8}
+              onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, '').slice(0, 8))} 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4" 
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-black uppercase">UL PARA</label>
+            <input 
+              type="text" 
+              value={filterUlPara} 
+              maxLength={8}
+              onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, '').slice(0, 8))} 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4" 
+            />
+          </div>
         </div>
         <div className="mt-8 flex justify-center gap-4">
           <button onClick={handleGenerate} disabled={loading} className="px-16 py-4 bg-black text-white rounded-xl font-bold text-sm uppercase flex items-center gap-3">{loading ? <Activity className="animate-spin" size={18}/> : <Play size={16} fill="currentColor"/>} GERAR</button>
@@ -355,14 +460,33 @@ const LeituristaControl: React.FC = () => {
 
           <section className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
              <div className="px-8 py-6 border-b border-slate-100 flex flex-wrap items-center justify-between">
-                <div className="flex items-center gap-6">
-                   <h3 className="text-xs font-black uppercase tracking-tight">Relação de Impedimentos</h3>
+                <div className="flex flex-wrap items-center gap-6">
+                   <h3 className="text-xs font-black uppercase tracking-tight leading-relaxed">
+                      Relação de Impedimentos.
+                   </h3>
                    <div className="flex bg-slate-100 p-1 rounded-xl">
                       <button onClick={() => { setActiveTab('completo'); setCurrentPage(1); }} className={`px-4 py-2 text-[10px] font-black rounded-lg transition-all ${activeTab === 'completo' ? 'bg-white shadow-sm' : 'text-slate-400'}`}>Geral</button>
                       <button onClick={() => { setActiveTab('razao'); setCurrentPage(1); }} className={`px-4 py-2 text-[10px] font-black rounded-lg transition-all ${activeTab === 'razao' ? 'bg-white shadow-sm' : 'text-slate-400'}`}>Por Razão</button>
                    </div>
                 </div>
-                <span className="text-[10px] bg-slate-100 px-3 py-1 rounded-full">{currentTableData.length} registros</span>
+                
+                <div className="flex items-center gap-4 mt-4 sm:mt-0">
+                   <div className="flex gap-2">
+                      <button 
+                        onClick={exportToExcel}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-100 transition-all"
+                      >
+                        <FileSpreadsheet size={14} /> Exportar para Excel
+                      </button>
+                      <button 
+                        onClick={exportToPDF}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[9px] font-black uppercase hover:bg-blue-100 transition-all"
+                      >
+                        <FileText size={14} /> Exportar para PDF
+                      </button>
+                   </div>
+                   <span className="text-[10px] bg-slate-100 px-3 py-1 rounded-full font-bold">{currentTableData.length} registros</span>
+                </div>
              </div>
              <div className="overflow-x-auto p-4">
                 <table className="w-full text-[10px] border-collapse">
@@ -392,6 +516,59 @@ const LeituristaControl: React.FC = () => {
                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-black text-white rounded-lg disabled:opacity-30"><ChevronLeft size={16}/></button>
                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-2 bg-black text-white rounded-lg disabled:opacity-30"><ChevronRight size={16}/></button>
                 </div>
+             </div>
+          </section>
+
+          {/* GRÁFICO DE IMPEDIMENTOS COM SELEÇÃO DE AGRUPAMENTO (FRONTEND ONLY) */}
+          <section className="bg-white p-10 rounded-[32px] shadow-sm border border-slate-200">
+             <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
+                <div className="flex items-center gap-4">
+                   <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                      <BarChart3 size={20} />
+                   </div>
+                   <div>
+                      <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight">Análise Gráfica de Impedimentos</h3>
+                   </div>
+                </div>
+
+                {/* ABA DE SELEÇÃO DE AGRUPAMENTO */}
+                <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                   <button 
+                     onClick={() => setChartGrouping('matr')}
+                     className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${chartGrouping === 'matr' ? 'bg-white text-blue-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}
+                   >
+                     Matr
+                   </button>
+                   <button 
+                     onClick={() => setChartGrouping('razao')}
+                     className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${chartGrouping === 'razao' ? 'bg-white text-blue-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}
+                   >
+                     Razão
+                   </button>
+                   <button 
+                     onClick={() => setChartGrouping('mes')}
+                     className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${chartGrouping === 'mes' ? 'bg-white text-blue-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}
+                   >
+                     Mês
+                   </button>
+                </div>
+             </div>
+
+             <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                   <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                      <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc', radius: 8}} />
+                      <Bar dataKey="impedimentos" name="Impedimentos" barSize={36} radius={[8, 8, 0, 0]}>
+                         {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.indicador >= 0.50 ? '#991b1b' : entry.indicador >= 0.41 ? '#b45309' : '#1d4ed8'} />
+                         ))}
+                         <LabelList dataKey="impedimentos" position="top" style={{ fill: '#0f172a', fontSize: '11px', fontWeight: '900' }} offset={10} />
+                      </Bar>
+                   </BarChart>
+                </ResponsiveContainer>
              </div>
           </section>
         </div>
