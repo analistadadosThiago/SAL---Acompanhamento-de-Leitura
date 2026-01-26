@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
-  RPC_CE_FILTRO_ANO,
-  RPC_CE_FILTRO_MES,
+  // Fixed: Replaced RPC_CE_FILTRO_ANO and RPC_CE_FILTRO_MES with existing exports from constants.ts
+  RPC_GET_ANOS,
+  RPC_GET_MESES,
   RPC_CE_IMPEDIMENTOS,
   RPC_CE_SIMULACAO_NOSB,
   MONTH_ORDER
@@ -100,8 +101,9 @@ const PrintControl: React.FC = () => {
     const fetchBaseFilters = async () => {
       try {
         const [resAnos, resMeses] = await Promise.all([
-          supabase.rpc(RPC_CE_FILTRO_ANO),
-          supabase.rpc(RPC_CE_FILTRO_MES)
+          // Fixed: Use valid RPC constants
+          supabase.rpc(RPC_GET_ANOS),
+          supabase.rpc(RPC_GET_MESES)
         ]);
         const anosList = (resAnos.data || []).map((a: any) => String(a.ano || a)).filter(Boolean).sort((a: any, b: any) => Number(b) - Number(a));
         const mesesList = (resMeses.data || []).map((m: any) => String(m.mes || m).toUpperCase())

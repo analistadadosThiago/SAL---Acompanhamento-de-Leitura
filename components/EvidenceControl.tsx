@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
-  RPC_CE_FILTRO_ANO,
-  RPC_CE_FILTRO_MES,
+  // Fixed: Replaced RPC_CE_FILTRO_ANO and RPC_CE_FILTRO_MES with existing exports from constants.ts
+  RPC_GET_ANOS,
+  RPC_GET_MESES,
   RPC_CE_TIPO_V9
 } from '../constants';
 import { 
@@ -51,8 +52,9 @@ const EvidenceControl: React.FC = () => {
     const fetchInitialMetadata = async () => {
       try {
         const [resAnos, resMeses] = await Promise.all([
-          supabase.rpc(RPC_CE_FILTRO_ANO),
-          supabase.rpc(RPC_CE_FILTRO_MES)
+          // Fixed: Use valid RPC constants
+          supabase.rpc(RPC_GET_ANOS),
+          supabase.rpc(RPC_GET_MESES)
         ]);
         const anos = (resAnos.data || []).map((a: any) => String(a.ano || a)).sort((a: any, b: any) => Number(b) - Number(a));
         const mesesRaw = (resMeses.data || []).map((m: any) => String(m.mes || m).toUpperCase());
@@ -274,8 +276,8 @@ const EvidenceControl: React.FC = () => {
                       <tr>
                          <th className="px-6 py-4 border border-slate-200">Mês</th>
                          <th className="px-6 py-4 border border-slate-200">Ano</th>
-                         <th className="px-6 py-4 border border-slate-200">Razão</th>
-                         <th className="px-6 py-4 border border-slate-200">Matrícula</th>
+                         <th className="px-6 py-4 border border-slate-200 font-bold">Razão</th>
+                         <th className="px-6 py-4 border border-slate-200 font-mono">Matrícula</th>
                          <th className="px-6 py-4 border border-slate-200 text-center">Solicitadas</th>
                          <th className="px-6 py-4 border border-slate-200 text-center">Realizadas</th>
                          <th className="px-6 py-4 border border-slate-200 text-center font-black">Indicador (%)</th>

@@ -34,7 +34,6 @@ export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impe
 // RPCs CONTROLE DE EVIDÊNCIAS (REQUISITO V9 ATUAL)
 export const RPC_CE_FILTRADO = "rpc_controle_evidencias_filtrado";
 export const RPC_CE_POR_RAZAO = "rpc_controle_evidencias_por_razao";
-// Fix: Adicionando constantes para suporte a componentes EvidenceControl e PrintControl
 export const RPC_CE_TIPO_V9 = "rpc_controle_evidencias_filtrado";
 export const RPC_CE_IMPEDIMENTOS = "rpc_controle_evidencias_impedimentos";
 export const RPC_CE_SIMULACAO_NOSB = "rpc_controle_evidencias_simulacao";
@@ -44,6 +43,9 @@ export const RPC_GET_ANOS = "get_anos_disponiveis";
 export const RPC_GET_MESES = "get_meses_disponiveis";
 export const RPC_GET_MATRICULAS = "get_matriculas_disponiveis";
 export const RPC_GET_ULS = "get_ul_disponiveis";
-// Fix: Adicionando aliases para filtros usados em componentes de auditoria
-export const RPC_CE_FILTRO_ANO = "get_anos_disponiveis";
-export const RPC_CE_FILTRO_MES = "get_meses_disponiveis";
+
+// NOVAS RPCs SIMPLES PARA CONTROLE DE EVIDÊNCIAS
+export const RPC_GET_ANOS_SIMPLES = "get_anos_simples";
+export const RPC_GET_MESES_SIMPLES = "get_meses_simples";
+export const RPC_GET_MESES_DISTINCT = "get_meses_validos_distinct";
+export const RPC_GET_MATRICULAS_SIMPLES = "get_matriculas_simples";
