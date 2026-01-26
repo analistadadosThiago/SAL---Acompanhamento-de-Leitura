@@ -6,6 +6,7 @@ import {
   RPC_GET_ANOS_SIMPLES,
   RPC_GET_MATRICULAS_SIMPLES,
   RPC_GET_MESES_POR_ANO,
+  RPC_GET_TODOS_MESES,
   MONTH_ORDER
 } from '../constants';
 import { 
@@ -52,7 +53,7 @@ const EvidenceAuditControl: React.FC = () => {
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Initial Load: Years and Matriculas
+  // Initial Load: Years, Matriculas and all available Months
   useEffect(() => {
     const loadInitialFilters = async () => {
       try {
@@ -86,33 +87,36 @@ const EvidenceAuditControl: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Dynamic Months logic: Fetch months based on selected Year
+  // Dynamic Months logic: Fetch only months that exist with digitacao > 0
   useEffect(() => {
     const fetchMeses = async () => {
-      if (!filterAno) {
-        setOptions(prev => ({ ...prev, meses: [] }));
-        setFilterMeses([]);
-        return;
-      }
-
       setLoadingMonths(true);
       try {
-        const { data: res, error } = await supabase.rpc(RPC_GET_MESES_POR_ANO, { p_ano: Number(filterAno) });
+        // Se houver ano, filtra meses por ano. Caso contrário, busca todos os meses válidos na base.
+        const rpcToCall = filterAno ? RPC_GET_MESES_POR_ANO : RPC_GET_TODOS_MESES;
+        const rpcParams = filterAno ? { p_ano: Number(filterAno) } : {};
+        
+        const { data: res, error } = await supabase.rpc(rpcToCall, rpcParams);
         if (error) throw error;
 
-        // Ensure we only show months that actually exist in the DB for that year (RPC usually handles this)
         const months = (res || []).map((i: any) => {
-          const val = typeof i === 'object' ? (i.valor || i.label || i.mes || '') : String(i);
+          const val = typeof i === 'object' ? (i.valor || i.label || i.mes || i.Mes || '') : String(i);
           return { valor: String(val), label: String(val) };
-        }).filter((o: any) => o.valor)
-        .sort((a: any, b: any) => (MONTH_ORDER[a.valor] || 0) - (MONTH_ORDER[b.valor] || 0));
+        }).filter((o: any) => o.valor && o.valor !== 'null')
+        .sort((a: any, b: any) => {
+          const orderA = MONTH_ORDER[a.valor] || MONTH_ORDER[a.valor.toUpperCase()] || 0;
+          const orderB = MONTH_ORDER[b.valor] || MONTH_ORDER[b.valor.toUpperCase()] || 0;
+          return orderA - orderB;
+        });
 
         setOptions(prev => ({ ...prev, meses: months }));
-        // Clean up selected months that might not exist for the new year
-        setFilterMeses(prev => prev.filter(m => months.some((opt: any) => opt.valor === m)));
+        
+        // Se mudou o ano, remove os meses selecionados que não existem no novo ano
+        if (filterAno) {
+          setFilterMeses(prev => prev.filter(m => months.some((opt: any) => opt.valor === m)));
+        }
       } catch (err) {
-        console.error("Erro ao carregar meses dinâmicos:", err);
-        setOptions(prev => ({ ...prev, meses: [] }));
+        console.error("Erro ao carregar meses:", err);
       } finally {
         setLoadingMonths(false);
       }
@@ -121,11 +125,8 @@ const EvidenceAuditControl: React.FC = () => {
   }, [filterAno]);
 
   const handleGenerate = async () => {
-    if (!filterAno || filterMeses.length === 0) return;
-
-    // Validation: UL DE <= UL PARA (If both are filled)
-    if (filterUlDe && filterUlPara && Number(filterUlDe) > Number(filterUlPara)) {
-      alert("Erro: O campo 'UL DE' não pode ser maior que o campo 'UL PARA'.");
+    if (!filterAno || filterMeses.length === 0) {
+      alert("Por favor, selecione o Ano e pelo menos um Mês.");
       return;
     }
 
@@ -189,6 +190,8 @@ const EvidenceAuditControl: React.FC = () => {
     return 'bg-[#166534] text-white'; // Green
   };
 
+  const canProcess = !!filterAno && filterMeses.length > 0;
+
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
       {/* Search Section */}
@@ -218,9 +221,9 @@ const EvidenceAuditControl: React.FC = () => {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">MÊS (MULTI)</label>
             <button 
               type="button" 
-              disabled={!filterAno || loadingMonths}
+              disabled={loadingMonths}
               onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)} 
-              className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold flex items-center justify-between hover:border-indigo-600 transition-all ${!filterAno ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold flex items-center justify-between hover:border-indigo-600 transition-all ${loadingMonths ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className="truncate">
                 {loadingMonths ? "Carregando..." : filterMeses.length === 0 ? "Selecionar Mês" : `${filterMeses.length} Selecionados`}
@@ -281,7 +284,7 @@ const EvidenceAuditControl: React.FC = () => {
               maxLength={8}
               onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, '').slice(0, 8))} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-black focus:border-indigo-600 outline-none" 
-              placeholder="0"
+              placeholder="Ex: 1000"
             />
           </div>
 
@@ -293,7 +296,7 @@ const EvidenceAuditControl: React.FC = () => {
               maxLength={8}
               onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, '').slice(0, 8))} 
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-black focus:border-indigo-600 outline-none" 
-              placeholder="99999"
+              placeholder="Ex: 9999"
             />
           </div>
         </div>
@@ -301,8 +304,8 @@ const EvidenceAuditControl: React.FC = () => {
         <div className="mt-12 flex justify-center gap-4">
           <button 
             onClick={handleGenerate} 
-            disabled={loading || !filterAno || filterMeses.length === 0} 
-            className={`px-24 py-5 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center gap-4 hover:scale-[1.02] active:scale-95 transition-all shadow-xl disabled:opacity-20 ${filterAno && filterMeses.length > 0 ? 'bg-indigo-600' : 'bg-slate-900'}`}
+            disabled={loading || !canProcess} 
+            className={`px-24 py-5 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center gap-4 hover:scale-[1.02] active:scale-95 transition-all shadow-xl disabled:opacity-20 ${canProcess ? 'bg-indigo-600' : 'bg-slate-900'}`}
           >
             {loading ? <Activity className="animate-spin" size={18} /> : <Zap size={18} fill="currentColor" />}
             PROCESSAR AUDITORIA

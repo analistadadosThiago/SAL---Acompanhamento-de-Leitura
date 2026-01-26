@@ -42,7 +42,7 @@ const App: React.FC = () => {
       case Menu.INICIO: return 'Strategic Intelligence';
       case Menu.CONSULTA_TECNICA: return 'Operational Query';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
-      case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
+      case Menu.CONTROLE_EVIDENCIAS: return 'CONTROLE DE EVIDÊNCIAS';
       default: return 'SAL Enterprise';
     }
   };
