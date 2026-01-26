@@ -50,3 +50,4 @@ export const RPC_GET_MESES_SIMPLES = "get_meses_simples";
 export const RPC_GET_MESES_DISTINCT = "get_meses_validos_distinct";
 export const RPC_GET_MATRICULAS_SIMPLES = "get_matriculas_simples";
 export const RPC_GET_TODOS_MESES = "get_todos_meses";
+export const RPC_GET_MESES_POR_ANO = "get_meses_por_ano";

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
-  BarChart3, Users, LogOut, Bell, Globe, Camera, FileText,
+  BarChart3, Users, LogOut, Bell, Globe, Camera,
   UserCircle, Settings, HelpCircle
 } from 'lucide-react';
 import { Menu } from './types';
@@ -10,7 +10,6 @@ import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
 import LeituristaControl from './components/LeituristaControl';
 import EvidenceAuditControl from './components/EvidenceAuditControl';
-import PrintControl from './components/PrintControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -34,7 +33,6 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
       case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
       case Menu.CONTROLE_EVIDENCIAS: return <EvidenceAuditControl />;
-      case Menu.RELATORIOS: return <PrintControl />;
       default: return <Dashboard />;
     }
   };
@@ -43,9 +41,8 @@ const App: React.FC = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Strategic Intelligence';
       case Menu.CONSULTA_TECNICA: return 'Operational Query';
-      case Menu.CONTROLE_LEITURISTA: return 'Field Performance';
-      case Menu.CONTROLE_EVIDENCIAS: return 'Evidence Audit';
-      case Menu.RELATORIOS: return 'Report Center';
+      case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
+      case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
       default: return 'SAL Enterprise';
     }
   };
@@ -53,9 +50,8 @@ const App: React.FC = () => {
   const menuItems = [
     { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={18} /> },
     { id: Menu.CONSULTA_TECNICA, label: 'Busca Técnica', icon: <Search size={18} /> },
-    { id: Menu.CONTROLE_LEITURISTA, label: 'Desempenho', icon: <Users size={18} /> },
-    { id: Menu.CONTROLE_EVIDENCIAS, label: 'Evidências', icon: <Camera size={18} /> },
-    { id: Menu.RELATORIOS, label: 'Relatórios', icon: <FileText size={18} /> },
+    { id: Menu.CONTROLE_LEITURISTA, label: 'Controle de Leiturista', icon: <Users size={18} /> },
+    { id: Menu.CONTROLE_EVIDENCIAS, label: 'CONTROLE DE EVIDÊNCIAS', icon: <Camera size={18} /> },
   ];
 
   return (
