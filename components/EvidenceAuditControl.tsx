@@ -1,91 +1,145 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { RPC_CONTROLE_EVIDENCIAS, TABLE_NAME, MONTH_ORDER } from '../constants';
+import { 
+  RPC_CE_FILTRADO, 
+  RPC_CE_POR_RAZAO,
+  RPC_GET_ANOS,
+  RPC_GET_MESES,
+  RPC_GET_MATRICULAS,
+  RPC_GET_ULS,
+  MONTH_ORDER 
+} from '../constants';
 import { 
   Filter, FileSpreadsheet, FileText, ChevronLeft, ChevronRight, 
-  Database, Activity, Check, ChevronDown, BarChart3, AlertTriangle, 
-  TrendingUp, Zap, RotateCcw, LayoutList, ClipboardList, Search, ListFilter
+  Database, Activity, Check, ChevronDown, AlertTriangle, 
+  TrendingUp, Zap, RotateCcw, Search, Camera,
+  LayoutList, BarChart3, Info, PieChart as PieIcon, LineChart as LineIcon,
+  CheckCircle2, XCircle
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  LabelList, Cell, Legend, LineChart, Line, PieChart, Pie
+} from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import IndicatorCard from './IndicatorCard';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 25;
+
+interface EvidenciaRecord {
+  mes: string;
+  ano: number;
+  rz: string;
+  ul: string | number;
+  solicitadas: number;
+  realizadas: number;
+  nao_realizadas: number;
+  matr: string;
+  nl: string;
+  l_atual: number;
+  digitacao: string;
+  indicador: number;
+  CorIndicador?: string; // Campo opcional vindo da RPC
+}
 
 const EvidenceAuditControl: React.FC = () => {
-  // Estados de Filtro
+  // Estados dos Filtros
   const [filterAno, setFilterAno] = useState<string>('');
   const [filterMeses, setFilterMeses] = useState<string[]>([]);
   const [filterMatr, setFilterMatr] = useState<string>('');
-  const [filterRazao, setFilterRazao] = useState<string>('');
   const [filterUlDe, setFilterUlDe] = useState<string>('');
   const [filterUlPara, setFilterUlPara] = useState<string>('');
 
-  // Opções para Selects
-  const [options, setOptions] = useState<{ anos: string[], meses: string[], matriculas: string[], razoes: string[] }>({
-    anos: [], meses: [], matriculas: [], razoes: []
+  // Estados das Opções (RPCs de Validação)
+  const [options, setOptions] = useState<{ anos: string[], meses: string[], matriculas: string[] }>({
+    anos: [], meses: [], matriculas: []
   });
 
-  // Controle de UI
-  const [rawResults, setRawResults] = useState<any[]>([]);
+  // Estados de Dados e UI
+  const [dataCompleto, setDataCompleto] = useState<EvidenciaRecord[]>([]);
+  const [dataPorRazao, setDataPorRazao] = useState<EvidenciaRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingFilters, setLoadingFilters] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [activeTab, setActiveTab] = useState<'completo' | 'razao'>('completo');
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<'detalhado' | 'razao'>('detalhado');
-  const [chartMode, setChartMode] = useState<'mes' | 'ano' | 'matr'>('mes');
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Carregar metadados para os filtros
+  // Carregar metadados iniciais via RPCs de validação
   useEffect(() => {
-    const fetchFilterOptions = async () => {
+    const fetchValidationFilters = async () => {
+      setLoadingFilters(true);
       try {
-        const [anoRes, mesRes, matrRes, rzRes] = await Promise.all([
-          supabase.from(TABLE_NAME).select('Ano').order('Ano', { ascending: false }),
-          supabase.from(TABLE_NAME).select('Mes').order('Mes', { ascending: true }),
-          supabase.from(TABLE_NAME).select('matr').order('matr', { ascending: true }),
-          supabase.from(TABLE_NAME).select('rz').order('rz', { ascending: true })
+        const [resAnos, resMeses, resMatr] = await Promise.all([
+          supabase.rpc(RPC_GET_ANOS),
+          supabase.rpc(RPC_GET_MESES),
+          supabase.rpc(RPC_GET_MATRICULAS)
         ]);
-        
+
         setOptions({
-          anos: Array.from(new Set((anoRes.data || []).map((r: any) => String(r.Ano)))),
-          meses: Array.from(new Set((mesRes.data || []).map((r: any) => String(r.Mes)))),
-          matriculas: Array.from(new Set((matrRes.data || []).map((r: any) => String(r.matr)))).sort(),
-          razoes: Array.from(new Set((rzRes.data || []).map((r: any) => String(r.rz)))).sort()
+          anos: (resAnos.data || []).map((a: any) => String(a.ano || a)).sort((a: string, b: string) => Number(b) - Number(a)),
+          meses: (resMeses.data || []).map((m: any) => String(m.mes || m)).sort((a: string, b: string) => (MONTH_ORDER[a] || 0) - (MONTH_ORDER[b] || 0)),
+          matriculas: (resMatr.data || []).map((m: any) => String(m.matr || m)).sort()
         });
       } catch (err) {
-        console.error("Erro ao carregar opções de filtros:", err);
+        console.error("Erro ao carregar validações de filtros:", err);
+      } finally {
+        setLoadingFilters(false);
       }
     };
-    fetchFilterOptions();
+    fetchValidationFilters();
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsMonthDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Validação: Habilitar GERAR apenas com filtros preenchidos
+  const canGenerate = filterAno !== '' && filterMeses.length > 0 && filterMatr !== '' && filterUlDe !== '' && filterUlPara !== '';
+
   const handleGenerate = async () => {
+    if (!canGenerate) return;
+    
+    // Validação lógica UL
+    if (Number(filterUlDe) > Number(filterUlPara)) {
+      alert("A UL inicial (DE) não pode ser maior que a UL final (PARA).");
+      return;
+    }
+
     setLoading(true);
-    setHasGenerated(false);
+    setCurrentPage(1);
+
     try {
-      // Regra v9: Conversão de tipos para RPC
       const params = {
-        p_ano: filterAno ? Number(filterAno) : null,
-        p_mes: filterMeses.length > 0 ? filterMeses : null,
-        p_rz: filterRazao || null,
-        p_matr: filterMatr || null,
-        p_ul_de: filterUlDe ? Number(filterUlDe) : null,
-        p_ul_para: filterUlPara ? Number(filterUlPara) : null
+        p_ano_inicial: Number(filterAno),
+        p_ano_final: Number(filterAno),
+        p_meses: filterMeses.join(','), 
+        p_matr: filterMatr,
+        p_ul_de: Number(filterUlDe),
+        p_ul_para: Number(filterUlPara)
       };
 
-      const { data, error } = await supabase.rpc(RPC_CONTROLE_EVIDENCIAS, params);
+      const [resCompleto, resRazao] = await Promise.all([
+        supabase.rpc(RPC_CE_FILTRADO, params),
+        supabase.rpc(RPC_CE_POR_RAZAO, params)
+      ]);
 
-      if (error) throw error;
-      
-      setRawResults(data || []);
+      if (resCompleto.error) throw resCompleto.error;
+      if (resRazao.error) throw resRazao.error;
+
+      setDataCompleto((resCompleto.data || []).sort((a: any, b: any) => b.indicador - a.indicador));
+      setDataPorRazao((resRazao.data || []).sort((a: any, b: any) => b.indicador - a.indicador));
       setHasGenerated(true);
-      setCurrentPage(1);
-    } catch (err) {
-      console.error("Erro ao gerar relatório:", err);
-      setRawResults([]);
+    } catch (err: any) {
+      console.error("Erro ao gerar evidências:", err);
+      alert(`Falha no processamento: ${err.message || 'Erro de conexão'}`);
     } finally {
       setLoading(false);
     }
@@ -95,198 +149,210 @@ const EvidenceAuditControl: React.FC = () => {
     setFilterAno('');
     setFilterMeses([]);
     setFilterMatr('');
-    setFilterRazao('');
     setFilterUlDe('');
     setFilterUlPara('');
-    setRawResults([]);
+    setDataCompleto([]);
+    setDataPorRazao([]);
     setHasGenerated(false);
     setCurrentPage(1);
   };
 
-  // Processamento de dados v9 - Detalhado
-  const processedData = useMemo(() => {
-    return rawResults.map(row => {
-      const dig = parseInt(row.digitacao || row.DIG || '0');
-      const fotoStatus = String(row.foto || '').toUpperCase();
-      
-      const solicitada = dig >= 2 ? 1 : 0;
-      const realizada = fotoStatus === 'OK' ? 1 : 0;
-      const nao_realizada = fotoStatus === 'N-OK' ? 1 : 0;
-      const indicador = solicitada > 0 ? (realizada / solicitada) * 100 : 0;
+  const currentData = activeTab === 'completo' ? dataCompleto : dataPorRazao;
+  const paginatedData = currentData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(currentData.length / ITEMS_PER_PAGE) || 1;
 
-      return {
-        ...row,
-        mes: row.Mes || row.MES || 'N/A',
-        ano: row.Ano || row.ANO || 0,
-        razao: row.rz || row.RAZAO || 'N/A',
-        ul: row.rz_ul_lv || row.UL || 'N/A',
-        solicitadas: solicitada,
-        realizadas: realizada,
-        nao_realizadas: nao_realizada,
-        matr: row.matr || row.MATR || 'N/A',
-        cod: row.nl || row.COD || 'N/A',
-        leitura: row.l_atual || row.LEITURA || 0,
-        indicador: indicador
-      };
-    }).sort((a, b) => b.indicador - a.indicador);
-  }, [rawResults]);
-
-  // Processamento de dados v9 - Agrupado por Razão
-  const aggregatedByRazao = useMemo(() => {
-    const grouped: Record<string, any> = {};
-    processedData.forEach(item => {
-      const key = item.razao;
-      if (!grouped[key]) {
-        grouped[key] = {
-          razao: key,
-          solicitadas: 0,
-          realizadas: 0,
-          nao_realizadas: 0,
-          mes: item.mes,
-          ano: item.ano
-        };
-      }
-      grouped[key].solicitadas += item.solicitadas;
-      grouped[key].realizadas += item.realizadas;
-      grouped[key].nao_realizadas += item.nao_realizadas;
-    });
-
-    return Object.values(grouped).map(g => ({
-      ...g,
-      indicador: g.solicitadas > 0 ? (g.realizadas / g.solicitadas) * 100 : 0
-    })).sort((a, b) => b.indicador - a.indicador);
-  }, [processedData]);
-
-  const currentDisplayData = activeTab === 'detalhado' ? processedData : aggregatedByRazao;
-  const paginatedData = currentDisplayData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const totalPages = Math.ceil(currentDisplayData.length / ITEMS_PER_PAGE) || 1;
-
-  const totals = useMemo(() => {
-    return processedData.reduce((acc, curr) => ({
-      sol: acc.sol + curr.solicitadas,
-      rea: acc.rea + curr.realizadas,
-      nre: acc.nre + curr.nao_realizadas
-    }), { sol: 0, rea: 0, nre: 0 });
-  }, [processedData]);
-
-  // Regras de Cores Estritas v9.0
-  const getRowStyle = (ind: number) => {
-    if (ind >= 50.0) return 'bg-[#991b1b] text-white font-black'; // Vermelho Escuro + Negrito
-    if (ind >= 41.0) return 'bg-[#b45309] text-white'; // Amarelo Escuro
-    return 'bg-[#166534] text-white'; // Verde Escuro
+  // Regra de cores por linha baseado em CorIndicador ou Threshhold manual v9
+  const getRowStyle = (row: EvidenciaRecord) => {
+    if (row.CorIndicador) {
+      if (row.CorIndicador === 'vermelho-escuro') return "bg-[#c62828] text-white font-bold border-red-900/50";
+      if (row.CorIndicador === 'amarelo-escuro') return "bg-[#f9a825] text-black border-amber-900/50";
+      if (row.CorIndicador === 'verde-escuro') return "bg-[#2e7d32] text-white border-green-900/50";
+    }
+    // Fallback Manual
+    const ind = row.indicador;
+    if (ind >= 50) return "bg-[#c62828] text-white font-bold border-red-900/50";
+    if (ind >= 41) return "bg-[#f9a825] text-black border-amber-900/50";
+    return "bg-[#2e7d32] text-white border-green-900/50";
   };
 
-  const chartData = useMemo(() => {
-    const grouped: Record<string, { label: string, sum: number, count: number }> = {};
-    processedData.forEach(item => {
-      const key = chartMode === 'mes' ? item.mes : chartMode === 'ano' ? String(item.ano) : item.matr;
-      if (!grouped[key]) {
-        grouped[key] = { label: key, sum: item.indicador, count: 1 };
-      } else {
-        grouped[key].sum += item.indicador;
-        grouped[key].count += 1;
-      }
+  const totals = useMemo(() => {
+    return dataCompleto.reduce((acc, curr) => ({
+      sol: acc.sol + (Number(curr.solicitadas) || 0),
+      rea: acc.rea + (Number(curr.realizadas) || 0),
+      nre: acc.nre + (Number(curr.nao_realizadas) || 0)
+    }), { sol: 0, rea: 0, nre: 0 });
+  }, [dataCompleto]);
+
+  // Gráfico 1: Barras - Solicitadas vs Realizadas por Mês
+  const barChartData = useMemo(() => {
+    const monthly: Record<string, { name: string, sol: number, rea: number }> = {};
+    dataCompleto.forEach(d => {
+      if (!monthly[d.mes]) monthly[d.mes] = { name: d.mes, sol: 0, rea: 0 };
+      monthly[d.mes].sol += Number(d.solicitadas) || 0;
+      monthly[d.mes].rea += Number(d.realizadas) || 0;
     });
-    return Object.values(grouped).map(g => ({
-      name: g.label,
-      indicador: Number((g.sum / g.count).toFixed(2))
-    })).sort((a, b) => b.indicador - a.indicador).slice(0, 15);
-  }, [processedData, chartMode]);
+    return Object.values(monthly).sort((a, b) => (MONTH_ORDER[a.name] || 0) - (MONTH_ORDER[b.name] || 0));
+  }, [dataCompleto]);
+
+  // Gráfico 2: Linhas - Indicador médio por Ano
+  const lineChartData = useMemo(() => {
+    const yearly: Record<number, { year: number, indSum: number, count: number }> = {};
+    dataCompleto.forEach(d => {
+      if (!yearly[d.ano]) yearly[d.ano] = { year: d.ano, indSum: 0, count: 0 };
+      yearly[d.ano].indSum += d.indicador;
+      yearly[d.ano].count++;
+    });
+    return Object.values(yearly).map(v => ({ year: v.year, indicador: v.indSum / v.count })).sort((a,b) => a.year - b.year);
+  }, [dataCompleto]);
+
+  // Gráfico 3: Pizza - Distribuição por Status
+  const pieChartData = [
+    { name: 'Realizadas', value: totals.rea, color: '#2e7d32' },
+    { name: 'Não-Realizadas', value: totals.nre, color: '#c62828' }
+  ].filter(p => p.value > 0);
+
+  const exportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(currentData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SAL_Evidencias_V9");
+    XLSX.writeFile(wb, `SAL_Auditoria_${activeTab}_${filterAno}.xlsx`);
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(16);
+    doc.text(`SAL - Controle de Evidências (${activeTab === 'completo' ? 'Geral' : 'Consolidado Razão'})`, 14, 15);
+    doc.setFontSize(9);
+    doc.text(`Ano: ${filterAno} | Meses: ${filterMeses.join(', ')} | UL: ${filterUlDe} a ${filterUlPara}`, 14, 22);
+
+    const headers = activeTab === 'completo' 
+      ? [["MÊS", "ANO", "RAZÃO", "UL", "SOLIC.", "REALIZ.", "N-REALIZ.", "MATR", "COD", "INDICADOR"]]
+      : [["MÊS", "ANO", "RAZÃO", "SOLIC.", "REALIZ.", "N-REALIZ.", "INDICADOR"]];
+    
+    const body = activeTab === 'completo'
+      ? currentData.map(r => [r.mes, r.ano, r.rz, r.ul, r.solicitadas, r.realizadas, r.nao_realizadas, r.matr, r.nl, `${r.indicador.toFixed(2)}%`])
+      : currentData.map(r => [r.mes, r.ano, r.rz, r.solicitadas, r.realizadas, r.nao_realizadas, `${r.indicador.toFixed(2)}%`]);
+
+    autoTable(doc, {
+      head: headers,
+      body: body,
+      startY: 28,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1.2 },
+      headStyles: { fillColor: [10, 12, 16], textColor: [255, 255, 255] }
+    });
+    doc.save(`SAL_Auditoria_${activeTab}_V9.pdf`);
+  };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500 pb-20">
-      {/* SEÇÃO DE FILTROS */}
-      <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
+      {/* 1. SEÇÃO DE FILTROS PROFISSIONAIS */}
+      <section className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-200 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 to-indigo-700"></div>
         <div className="flex items-center gap-4 mb-10">
-          <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg">
-            <Filter size={20} />
+          <div className="p-4 bg-slate-950 text-white rounded-3xl shadow-xl shadow-slate-900/20">
+            <Camera size={24} />
           </div>
           <div>
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight italic">Parâmetros de Auditoria v9.0</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle de Evidências em Campo</p>
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic">Auditoria de Evidências Fotográficas</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronização Estrutural V9.0</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
-          {/* Ano */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ano</label>
-            <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs focus:border-blue-500 outline-none">
-              <option value="">Todos</option>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+          {/* Filtro Ano */}
+          <div className="space-y-3">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Ano Operacional</label>
+            <select 
+              value={filterAno} 
+              onChange={e => setFilterAno(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all cursor-pointer"
+            >
+              <option value="">Selecione Ano</option>
               {options.anos.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
 
-          {/* Mês Multi-select */}
-          <div className="space-y-2 relative">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mês (Múltiplos)</label>
+          {/* Filtro Meses (Multi-Select Profissional) */}
+          <div className="space-y-3 relative" ref={dropdownRef}>
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Meses (Múltiplo)</label>
             <button 
               onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs flex items-center justify-between text-left"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold flex items-center justify-between hover:border-blue-200 transition-all shadow-sm"
             >
-              <span className="truncate">{filterMeses.length === 0 ? "Todos" : `${filterMeses.length} Selecionados`}</span>
-              <ChevronDown size={14} className="text-slate-400" />
+              <span className="truncate">{filterMeses.length === 0 ? "Selecionar Meses" : `${filterMeses.length} Selecionados`}</span>
+              <ChevronDown size={18} className={`transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {isMonthDropdownOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto p-2">
-                {options.meses.map(m => (
-                  <label key={m} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
-                    <input 
-                      type="checkbox" 
-                      checked={filterMeses.includes(m)}
-                      onChange={() => {
-                        setFilterMeses(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
-                      }}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-[11px] font-bold text-slate-600 uppercase">{m}</span>
-                  </label>
-                ))}
+              <div className="absolute z-[100] top-full left-0 right-0 mt-3 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-72 overflow-y-auto p-3 animate-in fade-in slide-in-from-top-2">
+                <div className="grid grid-cols-1 gap-1">
+                   {options.meses.map(m => (
+                    <label key={m} className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-colors ${filterMeses.includes(m) ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 text-slate-600'}`}>
+                      <input 
+                        type="checkbox" 
+                        checked={filterMeses.includes(m)}
+                        onChange={() => setFilterMeses(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <span className="text-xs font-black uppercase">{m}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Razão Social */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Razão Social</label>
-            <select value={filterRazao} onChange={e => setFilterRazao(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs focus:border-blue-500 outline-none">
-              <option value="">Todas</option>
-              {options.razoes.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-
-          {/* Matrícula */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Matrícula</label>
-            <select value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs focus:border-blue-500 outline-none">
-              <option value="">Todas</option>
+          {/* Filtro Matrícula */}
+          <div className="space-y-3">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Matrícula Técnica</label>
+            <select 
+              value={filterMatr} 
+              onChange={e => setFilterMatr(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-bold focus:border-blue-600 outline-none transition-all"
+            >
+              <option value="">Todas as Matrículas</option>
               {options.matriculas.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
 
-          {/* UL Inicial */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">UL Inicial</label>
+          {/* Filtro UL DE */}
+          <div className="space-y-3">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center justify-between">
+              UL Inicial (DE)
+              <button 
+                title="Sugerir range de UL"
+                onClick={async () => {
+                   const { data } = await supabase.rpc(RPC_GET_ULS);
+                   if (data && data.length > 0) {
+                      setFilterUlDe(String(data[0].min_ul || ''));
+                      setFilterUlPara(String(data[0].max_ul || ''));
+                   }
+                }}
+                className="text-[9px] text-blue-600 hover:underline font-black"
+              >
+                AUTOCARREGAR
+              </button>
+            </label>
             <input 
               type="text" 
-              value={filterUlDe} 
               maxLength={8}
+              value={filterUlDe} 
               onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-black focus:border-blue-600 outline-none" 
               placeholder="00000000"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs focus:border-blue-500 outline-none"
             />
           </div>
 
-          {/* UL Final */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">UL Final</label>
+          {/* Filtro UL PARA */}
+          <div className="space-y-3">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">UL Final (PARA)</label>
             <input 
               type="text" 
-              value={filterUlPara} 
               maxLength={8}
+              value={filterUlPara} 
               onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-black focus:border-blue-600 outline-none" 
               placeholder="99999999"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs focus:border-blue-500 outline-none"
             />
           </div>
         </div>
@@ -294,204 +360,220 @@ const EvidenceAuditControl: React.FC = () => {
         <div className="mt-12 flex justify-center gap-6">
           <button 
             onClick={handleGenerate} 
-            disabled={loading}
-            className="px-24 py-5 bg-blue-600 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] flex items-center gap-4 transition-all hover:bg-blue-700 shadow-xl shadow-blue-500/20 disabled:opacity-50"
+            disabled={loading || !canGenerate}
+            className="px-24 py-5 bg-slate-950 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.3em] flex items-center gap-4 hover:scale-[1.03] active:scale-95 transition-all shadow-2xl disabled:opacity-20 shadow-slate-900/40"
           >
             {loading ? <Activity className="animate-spin" size={20}/> : <Zap size={20} fill="currentColor"/>}
-            GERAR DADOS
+            SINCRO AUDITORIA
           </button>
-          <button onClick={handleReset} className="px-10 py-5 bg-slate-100 text-slate-500 rounded-3xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all">
-            <RotateCcw size={16} /> REINICIAR
+          <button onClick={handleReset} className="px-12 py-5 bg-slate-100 text-slate-500 rounded-[2.5rem] text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-slate-200 transition-all">
+            <RotateCcw size={18} /> RESETAR FILTROS
           </button>
         </div>
       </section>
 
-      {hasGenerated ? (
-        <div className="space-y-12 animate-in slide-in-from-bottom-6 duration-700">
-          {/* CARDS INDICADORES */}
+      {hasGenerated && (
+        <div className="space-y-12 animate-in slide-in-from-bottom-10 duration-1000">
+          {/* INDICADORES ESTRATÉGICOS V9 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <IndicatorCard label="Solicitadas" value={totals.sol.toLocaleString()} color="blue" icon={<ClipboardList size={24}/>} />
-            <IndicatorCard label="Realizadas (OK)" value={totals.rea.toLocaleString()} color="green" icon={<Check size={24}/>} />
-            <IndicatorCard label="Não Realizadas" value={totals.nre.toLocaleString()} color="red" icon={<AlertTriangle size={24}/>} />
-            <IndicatorCard label="Eficiência Geral" value={totals.sol > 0 ? (totals.rea / totals.sol * 100).toFixed(2).replace('.',',') : '0,00'} suffix="%" color="amber" icon={<TrendingUp size={24}/>} />
+            <IndicatorCard label="Dataset Consolidado" value={currentData.length.toLocaleString()} color="blue" icon={<Database size={24}/>} />
+            <IndicatorCard label="Total Solicitadas" value={totals.sol.toLocaleString()} color="blue" icon={<LayoutList size={24}/>} />
+            <IndicatorCard label="Total Realizadas" value={totals.rea.toLocaleString()} color="green" icon={<CheckCircle2 size={24}/>} />
+            <IndicatorCard label="Eficiência Média" value={(totals.sol > 0 ? (totals.rea/totals.sol)*100 : 0).toFixed(2).replace('.',',')} suffix="%" color="amber" icon={<TrendingUp size={24}/>} />
           </div>
 
-          {/* TABELA COM ABAS */}
-          <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden">
-            <div className="px-10 py-8 border-b border-slate-100 flex flex-wrap items-center justify-between gap-6 bg-slate-50/50">
-              <div className="flex items-center gap-8">
-                <div className="flex bg-slate-200 p-1.5 rounded-2xl">
-                  <button 
-                    onClick={() => { setActiveTab('detalhado'); setCurrentPage(1); }}
-                    className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'detalhado' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    Relatório Detalhado
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('razao'); setCurrentPage(1); }}
-                    className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'razao' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    Agrupado por Razão
-                  </button>
-                </div>
+          {/* TABELA DE RESULTADOS COM CORES V9 */}
+          <section className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-12 py-10 border-b border-slate-100 flex flex-wrap items-center justify-between gap-8">
+              <div className="flex bg-slate-100 p-2 rounded-[2rem] shadow-inner">
+                <button 
+                  onClick={() => { setActiveTab('completo'); setCurrentPage(1); }} 
+                  className={`px-12 py-3.5 text-[10px] font-black uppercase tracking-[0.15em] rounded-[1.5rem] transition-all ${activeTab === 'completo' ? 'bg-white shadow-xl text-slate-950 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Relatório Completo
+                </button>
+                <button 
+                  onClick={() => { setActiveTab('razao'); setCurrentPage(1); }} 
+                  className={`px-12 py-3.5 text-[10px] font-black uppercase tracking-[0.15em] rounded-[1.5rem] transition-all ${activeTab === 'razao' ? 'bg-white shadow-xl text-slate-950 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Relatório Por Razão
+                </button>
               </div>
 
-              <div className="flex items-center gap-4">
-                <button onClick={() => {
-                  const ws = XLSX.utils.json_to_sheet(currentDisplayData);
-                  const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
-                  XLSX.writeFile(wb, `SAL_Auditoria_${activeTab}.xlsx`);
-                }} className="flex items-center gap-3 px-6 py-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-100 transition-all">
+              <div className="flex gap-4">
+                <button onClick={exportExcel} className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
                   <FileSpreadsheet size={18}/> EXCEL
                 </button>
-                <button onClick={() => {
-                  const doc = new jsPDF({ orientation: 'landscape' });
-                  const body = paginatedData.map(r => activeTab === 'detalhado' ? 
-                    [r.mes, r.ano, r.razao, r.ul, r.solicitadas, r.realizadas, r.nao_realizadas, r.matr, r.cod, `${r.indicador.toFixed(2)}%`] :
-                    [r.mes, r.ano, r.razao, r.solicitadas, r.realizadas, r.nao_realizadas, `${r.indicador.toFixed(2)}%`]
-                  );
-                  autoTable(doc, { 
-                    head: [activeTab === 'detalhado' ? 
-                      ["MES", "ANO", "RAZÃO", "UL", "SOLIC", "REALIZ", "N-REALIZ", "MATR", "COD", "INDICADOR (%)"] :
-                      ["MES", "ANO", "RAZÃO", "SOLIC", "REALIZ", "N-REALIZ", "INDICADOR (%)"]
-                    ], 
-                    body, theme: 'grid', styles: { fontSize: 7 } 
-                  });
-                  doc.save(`SAL_Auditoria_${activeTab}.pdf`);
-                }} className="flex items-center gap-3 px-6 py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl text-[10px] font-black uppercase hover:bg-blue-100 transition-all">
-                  <FileText size={18}/> PDF
+                <button onClick={exportPDF} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
+                  <FileText size={18}/> PDF V9
                 </button>
-                <span className="text-[10px] font-black bg-white border border-slate-200 px-4 py-2 rounded-full text-slate-500 uppercase">
-                  {currentDisplayData.length} Registros
-                </span>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-[11px] border-collapse text-left">
-                <thead className="bg-white text-slate-400 font-black uppercase tracking-widest border-b">
+            <div className="overflow-x-auto p-6">
+              <table className="w-full text-[11px] border-separate border-spacing-y-2">
+                <thead className="text-slate-500 font-black uppercase tracking-widest text-[9px]">
                   <tr>
-                    <th className="px-8 py-6">Mês</th>
-                    <th className="px-8 py-6">Ano</th>
-                    <th className="px-8 py-6">Razão Social</th>
-                    {activeTab === 'detalhado' && (
+                    <th className="px-6 py-4 text-center">MÊS</th>
+                    <th className="px-6 py-4 text-center">ANO</th>
+                    <th className="px-6 py-4 text-left">RAZÃO SOCIAL</th>
+                    {activeTab === 'completo' && <th className="px-6 py-4 text-center">UL</th>}
+                    <th className="px-6 py-4 text-center">SOLIC.</th>
+                    <th className="px-6 py-4 text-center">REALIZ.</th>
+                    <th className="px-6 py-4 text-center">N-REALIZ.</th>
+                    {activeTab === 'completo' && (
                       <>
-                        <th className="px-8 py-6">UL</th>
-                        <th className="px-8 py-6">Matrícula</th>
-                        <th className="px-8 py-6 text-center">Cód.</th>
+                        <th className="px-6 py-4 text-center">MATR</th>
+                        <th className="px-6 py-4 text-center">COD</th>
+                        <th className="px-6 py-4 text-right">LEITURA</th>
+                        <th className="px-6 py-4 text-center">DIG.</th>
                       </>
                     )}
-                    <th className="px-8 py-6 text-center">Solicitadas</th>
-                    <th className="px-8 py-6 text-center">Realizadas</th>
-                    <th className="px-8 py-6 text-center">N-Realizadas</th>
-                    <th className="px-8 py-6 text-right">Indicador (%)</th>
+                    <th className="px-6 py-4 text-right">INDICADOR</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-transparent">
                   {paginatedData.map((row, idx) => (
-                    <tr key={idx} className={`${getRowStyle(row.indicador)} border-b border-white/10 transition-all hover:brightness-110`}>
-                      <td className="px-8 py-4 uppercase font-bold">{row.mes}</td>
-                      <td className="px-8 py-4">{row.ano}</td>
-                      <td className="px-8 py-4 font-bold">{row.razao}</td>
-                      {activeTab === 'detalhado' && (
+                    <tr key={idx} className={`${getRowStyle(row)} shadow-lg transition-transform hover:scale-[1.002]`}>
+                      <td className="px-6 py-4 uppercase font-black text-center rounded-l-2xl">{row.mes}</td>
+                      <td className="px-6 py-4 text-center">{row.ano}</td>
+                      <td className="px-6 py-4 text-left uppercase font-black truncate max-w-[220px]">{row.rz}</td>
+                      {activeTab === 'completo' && <td className="px-6 py-4 font-mono text-center">{row.ul}</td>}
+                      <td className="px-6 py-4 font-black text-center">{row.solicitadas}</td>
+                      <td className="px-6 py-4 font-black text-center">{row.realizadas}</td>
+                      <td className="px-6 py-4 text-center opacity-80">{row.nao_realizadas}</td>
+                      {activeTab === 'completo' && (
                         <>
-                          <td className="px-8 py-4 font-mono">{row.ul}</td>
-                          <td className="px-8 py-4 font-mono">{row.matr}</td>
-                          <td className="px-8 py-4 text-center">{row.cod}</td>
+                          <td className="px-6 py-4 font-mono text-center">{row.matr}</td>
+                          <td className="px-6 py-4 font-black text-center italic">{row.nl}</td>
+                          <td className="px-6 py-4 text-right font-black">{row.l_atual}</td>
+                          <td className="px-6 py-4 text-[9px] text-center opacity-70 truncate max-w-[80px]">{row.digitacao}</td>
                         </>
                       )}
-                      <td className="px-8 py-4 text-center">{row.solicitadas}</td>
-                      <td className="px-8 py-4 text-center">{row.realizadas}</td>
-                      <td className="px-8 py-4 text-center">{row.nao_realizadas}</td>
-                      <td className="px-8 py-4 text-right font-black text-sm">{row.indicador.toFixed(2).replace('.',',')}%</td>
+                      <td className="px-6 py-4 font-black text-right text-sm rounded-r-2xl">
+                        {row.indicador.toFixed(2).replace('.', ',')}%
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="px-10 py-6 bg-slate-50 border-t flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</span>
-              <div className="flex gap-3">
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-3 bg-white border border-slate-200 rounded-xl hover:border-blue-500 disabled:opacity-30">
-                  <ChevronLeft size={20} className="text-slate-600"/>
+            <div className="px-12 py-8 border-t flex items-center justify-between bg-slate-50">
+              <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Dataset Página {currentPage} de {totalPages}</span>
+              <div className="flex gap-4">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-blue-500 shadow-sm disabled:opacity-30 transition-all">
+                  <ChevronLeft size={20} />
                 </button>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-3 bg-white border border-slate-200 rounded-xl hover:border-blue-500 disabled:opacity-30">
-                  <ChevronRight size={20} className="text-slate-600"/>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-blue-500 shadow-sm disabled:opacity-30 transition-all">
+                  <ChevronRight size={20} />
                 </button>
               </div>
             </div>
           </section>
 
-          {/* DIAGNÓSTICO GRÁFICO */}
-          <section className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-200">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-8">
-              <div className="flex items-center gap-5">
-                <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl shadow-inner">
-                  <BarChart3 size={24}/>
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight italic">Análise Visual do Lote</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Indicadores Médios por {chartMode === 'matr' ? 'Matrícula' : chartMode}</p>
-                </div>
+          {/* TRÊS GRÁFICOS ANALÍTICOS V9 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            {/* Gráfico 1: Barras - Solicitadas vs Realizadas */}
+            <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-200">
+              <div className="flex items-center gap-4 mb-10">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><BarChart3 size={20} /></div>
+                <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight italic">Status de Evidências por Mês</h3>
               </div>
-              <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                {(['mes', 'ano', 'matr'] as const).map(m => (
-                  <button 
-                    key={m}
-                    onClick={() => setChartMode(m)}
-                    className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${chartMode === m ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    {m === 'matr' ? 'Matrícula' : m}
-                  </button>
-                ))}
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                    <Tooltip cursor={{fill: '#f8fafc', radius: 8}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '10px', fontWeight: 'black', textTransform: 'uppercase' }} />
+                    <Bar dataKey="sol" name="Solicitadas" fill="#0f172a" barSize={30} radius={[6,6,0,0]} />
+                    <Bar dataKey="rea" name="Realizadas" fill="#2e7d32" barSize={30} radius={[6,6,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="h-[450px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} unit="%" />
-                  <Tooltip cursor={{fill: '#f8fafc', radius: 12}} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="indicador" name="Indicador (%)" barSize={40} radius={[12, 12, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.indicador >= 50.0 ? '#991b1b' : entry.indicador >= 41.0 ? '#b45309' : '#166534'} />
-                    ))}
-                    <LabelList dataKey="indicador" position="top" style={{ fill: '#0f172a', fontSize: '11px', fontWeight: '900' }} offset={10} formatter={(v: number) => `${v}%`} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            {/* Gráfico 2: Linhas - Evolução do Indicador */}
+            <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-200">
+              <div className="flex items-center gap-4 mb-10">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><LineIcon size={20} /></div>
+                <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight italic">Evolução do Indicador por Ano</h3>
+              </div>
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={lineChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} unit="%" />
+                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                    <Line type="monotone" dataKey="indicador" name="Eficiência Média" stroke="#2563eb" strokeWidth={5} dot={{ r: 6, fill: '#2563eb' }} activeDot={{ r: 8 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </section>
+
+            {/* Gráfico 3: Pizza - Distribuição por Status */}
+            <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-200 lg:col-span-2">
+              <div className="flex items-center gap-4 mb-10">
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl"><PieIcon size={20} /></div>
+                <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight italic">Distribuição Status de Auditoria</h3>
+              </div>
+              <div className="h-[400px] w-full flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                   <PieChart>
+                    <Pie
+                      data={pieChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={140}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    >
+                      {pieChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        /* PLACEHOLDER INICIAL */
-        <div className="flex flex-col items-center justify-center py-40 border-2 border-dashed border-slate-200 rounded-[3.5rem] bg-white text-center">
-          {loading ? (
-             <div className="flex flex-col items-center gap-8">
-                <div className="relative">
-                  <div className="h-24 w-24 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin"></div>
-                  <Database size={30} className="absolute inset-0 m-auto text-blue-600 animate-pulse" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-lg font-black text-slate-900 uppercase tracking-tight">Processando Dataset v9.0</p>
-                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.5em] animate-pulse">Cruzando Matrizes de Evidências...</p>
+      )}
+
+      {!hasGenerated && !loading && (
+        <div className="flex flex-col items-center justify-center py-40 bg-white border-2 border-dashed border-slate-200 rounded-[4rem] text-center shadow-inner">
+          <div className="p-16 bg-slate-50 rounded-full mb-10 text-slate-200 animate-pulse">
+             <Camera size={100} />
+          </div>
+          <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Auditoria Operacional V9.0</h3>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-8 max-w-md leading-relaxed">
+            Selecione Ano, Meses e Parâmetros de UL para materializar a matriz de auditoria em tempo real.
+          </p>
+          {loadingFilters && <span className="mt-6 text-[9px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Sincronizando Filtros Validados via RPC...</span>}
+        </div>
+      )}
+
+      {loading && (
+        <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-white p-24 rounded-[5rem] shadow-2xl flex flex-col items-center gap-10 border border-slate-100">
+             <div className="relative">
+                <div className="h-32 w-32 border-[8px] border-slate-50 border-t-blue-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 m-auto h-16 w-16 bg-blue-50 rounded-full flex items-center justify-center">
+                   <Database size={32} className="text-blue-600 animate-pulse" />
                 </div>
              </div>
-          ) : (
-            <>
-              <div className="p-12 bg-slate-50 rounded-full mb-10 text-slate-200 shadow-inner">
-                <Search size={80} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Pronto para Analisar</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-6 max-w-sm leading-loose">
-                Selecione os filtros acima e clique em Gerar Dados para materializar os indicadores de auditoria.
-              </p>
-            </>
-          )}
+             <div className="text-center">
+                <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tighter italic">Dataset Materialization</h2>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.5em] mt-5 animate-pulse">Processando Matriz de Evidências v9.0 Neural...</p>
+             </div>
+          </div>
         </div>
       )}
     </div>

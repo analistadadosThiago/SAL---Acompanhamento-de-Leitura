@@ -31,27 +31,19 @@ export const RPC_CL_FILTROS = "rpc_cl_filtros_leiturista";
 export const RPC_CL_TABELA_IMPEDIMENTOS = "rpc_controle_leiturista_impedimentos";
 export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impedimentos";
 
-// RPC OFICIAL PARA AUDITORIA DE EVIDÊNCIAS (REGRA V9)
-export const RPC_CE_TIPO_V9 = "rpc_indicadores_por_tipo_v9";
+// RPCs CONTROLE DE EVIDÊNCIAS (REQUISITO V9 ATUAL)
+export const RPC_CE_FILTRADO = "rpc_controle_evidencias_filtrado";
+export const RPC_CE_POR_RAZAO = "rpc_controle_evidencias_por_razao";
+// Fix: Adicionando constantes para suporte a componentes EvidenceControl e PrintControl
+export const RPC_CE_TIPO_V9 = "rpc_controle_evidencias_filtrado";
+export const RPC_CE_IMPEDIMENTOS = "rpc_controle_evidencias_impedimentos";
+export const RPC_CE_SIMULACAO_NOSB = "rpc_controle_evidencias_simulacao";
 
-// NOVAS RPCs SUBMENUS EVIDÊNCIA
-export const RPC_CE_IMPEDIMENTOS = "rpc_controle_impressao_nosb_impedimento";
-export const RPC_CE_SIMULACAO_NOSB = "rpc_controle_impressao_nosb_simulacao";
-export const RPC_CE_QUANTITATIVO = "rpc_ce_quantitativo";
-
-// RPCs de Filtros Isoladas (OFICIAIS)
-export const RPC_CE_FILTRO_ANO = "rpc_filtro_ano";
-export const RPC_CE_FILTRO_MES = "rpc_filtro_mes";
-export const RPC_CE_FILTRO_RZ = "rpc_rz";
-export const RPC_CE_FILTRO_MATRICULA = "rpc_matriculas";
-
-// NOVAS RPCs PARA FILTROS CONTROLE DE IMPRESSÃO (AJUSTE FINAL)
-export const RPC_FILTRO_RAZAO_CI = "rpc_filtro_razao_social_ci";
-export const RPC_FILTRO_MATRICULA_CI = "rpc_filtro_matricula_tecnico_ci";
-
-// RPCs EXCLUSIVAS PARA UI (REQUISITO AJUSTE FINAL)
-export const RPC_FILTRO_RAZAO_CI_UI = "rpc_filtro_razao_social_ci_ui";
-export const RPC_FILTRO_MATRICULA_CI_UI = "rpc_filtro_matricula_tecnico_ci_ui";
-
-// NOVA RPC PARA CONTROLE DE EVIDÊNCIAS (REQUISITO ATUAL)
-export const RPC_CONTROLE_EVIDENCIAS = "rpc_controle_evidencias";
+// RPCs DE VALIDAÇÃO DE FILTROS (REQUISITO V9)
+export const RPC_GET_ANOS = "get_anos_disponiveis";
+export const RPC_GET_MESES = "get_meses_disponiveis";
+export const RPC_GET_MATRICULAS = "get_matriculas_disponiveis";
+export const RPC_GET_ULS = "get_ul_disponiveis";
+// Fix: Adicionando aliases para filtros usados em componentes de auditoria
+export const RPC_CE_FILTRO_ANO = "get_anos_disponiveis";
+export const RPC_CE_FILTRO_MES = "get_meses_disponiveis";
