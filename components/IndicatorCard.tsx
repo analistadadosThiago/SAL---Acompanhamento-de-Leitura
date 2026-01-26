@@ -40,20 +40,20 @@ const IndicatorCard: React.FC<IndicatorCardProps> = ({ label, value, icon, color
   const currentTheme = colorMap[color] || colorMap.blue;
 
   return (
-    <div className={`rounded-[28px] border-l-[6px] ${currentTheme.border} ${currentTheme.bg} p-7 shadow-sm border border-slate-200 transition-all hover:shadow-xl hover:-translate-y-1 group`}>
+    <div className={`rounded-[24px] border-l-[6px] ${currentTheme.border} ${currentTheme.bg} p-6 shadow-sm border border-slate-200 transition-all hover:shadow-xl hover:-translate-y-1 group`}>
       <div className="flex items-start justify-between">
         <div className="space-y-3">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">{label}</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{label}</p>
           <div className="flex items-baseline gap-1">
-            <p className={`text-4xl font-black ${currentTheme.text} tracking-tighter leading-none`}>
+            <p className={`text-3xl font-black ${currentTheme.text} tracking-tight leading-none`}>
               {value}
             </p>
-            {suffix && <span className="text-lg font-black text-slate-300 uppercase">{suffix}</span>}
+            {suffix && <span className="text-sm font-black text-slate-300 uppercase ml-1">{suffix}</span>}
           </div>
         </div>
         {icon && (
-          <div className={`p-4 rounded-2xl ${currentTheme.iconBg} transition-transform group-hover:scale-110`}>
-            {icon}
+          <div className={`p-3 rounded-xl ${currentTheme.iconBg} transition-transform group-hover:scale-110`}>
+            {React.cloneElement(icon as React.ReactElement, { size: 20 })}
           </div>
         )}
       </div>

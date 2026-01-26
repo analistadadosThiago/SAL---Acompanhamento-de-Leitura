@@ -1,18 +1,30 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
-  BarChart3, Users, LogOut, Bell, Globe, Camera
+  BarChart3, Users, LogOut, Bell, Globe, Camera, FileText,
+  UserCircle, Settings, HelpCircle
 } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
 import LeituristaControl from './components/LeituristaControl';
 import EvidenceAuditControl from './components/EvidenceAuditControl';
+import PrintControl from './components/PrintControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = (e: any) => {
+      setScrolled(e.target.scrollTop > 20);
+    };
+    const viewport = document.getElementById('main-viewport');
+    viewport?.addEventListener('scroll', handleScroll);
+    return () => viewport?.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -22,51 +34,54 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
       case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
       case Menu.CONTROLE_EVIDENCIAS: return <EvidenceAuditControl />;
+      case Menu.RELATORIOS: return <PrintControl />;
       default: return <Dashboard />;
     }
   };
 
   const getMenuTitle = () => {
     switch(activeMenu) {
-      case Menu.INICIO: return 'Analytics Estratégico';
-      case Menu.CONSULTA_TECNICA: return 'Consulta Operacional';
-      case Menu.CONTROLE_LEITURISTA: return 'Performance de Campo';
-      case Menu.CONTROLE_EVIDENCIAS: return 'Auditoria de Evidências';
-      default: return 'SAL v9.0';
+      case Menu.INICIO: return 'Strategic Intelligence';
+      case Menu.CONSULTA_TECNICA: return 'Operational Query';
+      case Menu.CONTROLE_LEITURISTA: return 'Field Performance';
+      case Menu.CONTROLE_EVIDENCIAS: return 'Evidence Audit';
+      case Menu.RELATORIOS: return 'Report Center';
+      default: return 'SAL Enterprise';
     }
   };
 
   const menuItems = [
-    { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={20} /> },
-    { id: Menu.CONSULTA_TECNICA, label: 'Consulta Técnica', icon: <Search size={20} /> },
-    { id: Menu.CONTROLE_LEITURISTA, label: 'Controle de Leiturista', icon: <Users size={20} /> },
-    { id: Menu.CONTROLE_EVIDENCIAS, label: 'Controle de Evidências', icon: <Camera size={20} /> },
+    { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={18} /> },
+    { id: Menu.CONSULTA_TECNICA, label: 'Busca Técnica', icon: <Search size={18} /> },
+    { id: Menu.CONTROLE_LEITURISTA, label: 'Desempenho', icon: <Users size={18} /> },
+    { id: Menu.CONTROLE_EVIDENCIAS, label: 'Evidências', icon: <Camera size={18} /> },
+    { id: Menu.RELATORIOS, label: 'Relatórios', icon: <FileText size={18} /> },
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f0f2f5] font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900">
-      {/* Sidebar Corporativa Premium */}
+    <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+      {/* Premium Corporate Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-[#0a0c10] text-white shadow-2xl transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-72 bg-[#020617] text-white shadow-2xl transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex h-full flex-col">
-          {/* Logo Section */}
-          <div className="px-8 py-10 border-b border-white/5">
+          {/* Brand Identity */}
+          <div className="px-8 py-10">
             <div className="flex items-center gap-4 group cursor-pointer">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-xl shadow-blue-500/20 ring-1 ring-white/20 transition-transform group-hover:scale-105">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-700 shadow-xl shadow-indigo-500/20 ring-1 ring-white/10 transition-all group-hover:rotate-6 group-hover:scale-110">
                 <BarChart3 size={24} className="text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xl font-black tracking-tight text-white leading-none">SAL <span className="text-blue-500">v9</span></span>
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">SISTEMA ANALÍTICO</span>
+                <span className="text-2xl font-black tracking-tight text-white leading-none">SAL <span className="text-indigo-400">v9.0</span></span>
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1.5">Enterprise Analysis</span>
               </div>
             </div>
           </div>
 
-          {/* Navigation Menu */}
-          <nav className="flex-1 space-y-1.5 p-6 mt-4 overflow-y-auto">
-            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4">Módulos do Sistema</p>
+          {/* Navigational Hub */}
+          <nav className="flex-1 space-y-1 px-6 mt-4 overflow-y-auto custom-scrollbar">
+            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Core Modules</p>
             {menuItems.map((item) => (
               <button
                 key={item.id}
@@ -74,9 +89,9 @@ const App: React.FC = () => {
                   setActiveMenu(item.id);
                   if (window.innerWidth < 1024) setIsSidebarOpen(false);
                 }}
-                className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
+                className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${
                   activeMenu === item.id 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 translate-x-1' 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
                     : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 }`}
               >
@@ -86,65 +101,77 @@ const App: React.FC = () => {
                 {item.label}
               </button>
             ))}
+            
+            <div className="pt-10">
+              <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Support</p>
+              <button className="flex w-full items-center gap-4 px-4 py-3 text-xs font-bold text-slate-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+                <Settings size={18} /> CONFIGURAÇÕES
+              </button>
+              <button className="flex w-full items-center gap-4 px-4 py-3 text-xs font-bold text-slate-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+                <HelpCircle size={18} /> SUPORTE TÉCNICO
+              </button>
+            </div>
           </nav>
 
-          {/* Footer Sidebar */}
-          <div className="p-6 border-t border-white/5 space-y-4">
-            <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/5">
+          {/* Sidebar Footer */}
+          <div className="p-6 border-t border-white/5">
+            <div className="bg-slate-900/40 rounded-2xl p-4 border border-white/5 mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Servidor Online</span>
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Node: Active</span>
               </div>
             </div>
-            <button className="flex w-full items-center gap-3 px-4 py-2 text-slate-500 hover:text-red-400 text-xs font-bold transition-colors">
-              <LogOut size={16} />
-              SAIR DO SISTEMA
+            <button className="flex w-full items-center justify-center gap-3 px-4 py-3 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">
+              <LogOut size={14} /> SAIR DO SISTEMA
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Container */}
+      {/* Main Experience Layer */}
       <main className="flex flex-1 flex-col overflow-hidden relative">
-        {/* Modern Header */}
-        <header className="flex h-20 items-center justify-between border-b bg-white/80 backdrop-blur-xl px-8 z-30">
+        {/* Dynamic Header */}
+        <header className={`flex h-20 items-center justify-between px-8 z-40 transition-all duration-300 ${scrolled ? 'bg-white/90 backdrop-blur-md shadow-sm border-b' : 'bg-transparent'}`}>
           <div className="flex items-center gap-6">
-            <button onClick={toggleSidebar} className="lg:hidden text-slate-600 p-2 hover:bg-slate-100 rounded-xl transition-all">
+            <button onClick={toggleSidebar} className="lg:hidden text-slate-600 p-2.5 hover:bg-slate-100 rounded-xl transition-all">
               {isSidebarOpen ? <X size={24} /> : <MenuIcon size={24} />}
             </button>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase italic flex items-center gap-3">
                 {getMenuTitle()}
               </h1>
               <div className="flex items-center gap-2 mt-0.5">
-                 <Globe size={10} className="text-blue-500" />
+                 <Globe size={10} className="text-indigo-500" />
                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                   Monitoramento em Tempo Real
+                   Monitoramento de Rede em Tempo Real
                  </p>
               </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-             <button className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all relative">
-                <Bell size={20} />
-                <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white"></span>
+          <div className="flex items-center gap-5">
+             <button className="hidden sm:flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-100 transition-all">
+               <ShieldCheck size={14} /> SECURITY AUDIT: ON
              </button>
-             <div className="h-8 w-px bg-slate-200 mx-2"></div>
-             <div className="flex items-center gap-3 pl-2">
+             <button className="p-3 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all relative">
+                <Bell size={20} />
+                <span className="absolute top-3 right-3 h-2 w-2 bg-rose-500 rounded-full border-2 border-white"></span>
+             </button>
+             <div className="h-8 w-px bg-slate-200 mx-1"></div>
+             <div className="flex items-center gap-3 pl-2 group cursor-pointer">
                 <div className="text-right hidden sm:block">
-                   <p className="text-xs font-black text-slate-900 leading-none">ANALISTA MASTER</p>
-                   <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">ADMINISTRADOR</span>
+                   <p className="text-xs font-black text-slate-900 leading-none group-hover:text-indigo-600 transition-colors">ANALISTA MASTER</p>
+                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">SUPER ADMIN</span>
                 </div>
-                <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200">
-                  <ShieldCheck size={20} className="text-slate-400" />
+                <div className="h-11 w-11 rounded-2xl bg-slate-100 flex items-center justify-center border-2 border-slate-200 transition-all group-hover:border-indigo-500 group-hover:scale-105 overflow-hidden">
+                  <UserCircle size={24} className="text-slate-400" />
                 </div>
              </div>
           </div>
         </header>
 
-        {/* Viewport Area */}
-        <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10 custom-scrollbar">
+        {/* Scalable Viewport Area */}
+        <div id="main-viewport" className="flex-1 overflow-y-auto p-6 lg:p-10 custom-scrollbar scroll-smooth">
           <div className="mx-auto max-w-7xl">
             {renderContent()}
           </div>
