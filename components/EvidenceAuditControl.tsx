@@ -12,7 +12,7 @@ import {
   Activity, Check, ChevronDown, 
   Zap, Camera, Loader2, AlertCircle, RefreshCw,
   Maximize2, Minimize2, FileText, TrendingUp, BarChart3,
-  FileDown, Trash2, ClipboardList, Printer
+  FileDown, Trash2, ClipboardList, Printer, Tag
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -30,15 +30,6 @@ interface EvidenciaRecord {
   nao_realizadas: number;
   matr: string;
   indicador: number;
-  solSet?: Set<string>;
-  reaSet?: Set<string>;
-}
-
-interface SummaryMetrics {
-  sol: number;
-  rea: number;
-  nre: number;
-  ind: number;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -59,7 +50,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
             <span className="text-red-700 font-black">{data.nre.toLocaleString()}</span>
           </div>
           <div className="pt-2 border-t mt-2 flex justify-between items-center">
-            <span className="font-bold text-indigo-600 uppercase">Eficiência:</span>
+            <span className="font-bold text-indigo-600 uppercase">Indicador:</span>
             <span className="text-indigo-800 font-black text-sm">{data.ind.toFixed(2)}%</span>
           </div>
         </div>
@@ -81,7 +72,6 @@ const EvidenceAuditControl: React.FC = () => {
   });
 
   const [data, setData] = useState<EvidenciaRecord[]>([]);
-  const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics>({ sol: 0, rea: 0, nre: 0, ind: 0 });
   const [loading, setLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
@@ -130,6 +120,7 @@ const EvidenceAuditControl: React.FC = () => {
 
   const handleGenerate = async () => {
     setValidationError(null);
+    setConnectionError(null);
     if (!filterAno || filterMeses.length === 0) {
       setValidationError("Selecione Ano e pelo menos um Mês para processar.");
       return;
@@ -142,19 +133,15 @@ const EvidenceAuditControl: React.FC = () => {
     setCurrentPage(1);
 
     try {
-      const allRecords: any[] = [];
+      const groupedMap = new Map();
       let from = 0;
-      const step = 5000;
+      const step = 1000;
       let hasMore = true;
-
-      // Sets para contagem de instalações únicas (Problema 1)
-      const uniqueSolSet = new Set<string>();
-      const uniqueReaSet = new Set<string>();
 
       while (hasMore) {
         let query = supabase
           .from(TABLE_NAME)
-          .select('Ano, Mes, rz, matr, digitacao, foto, instalacao, rz_ul_lv') 
+          .select('Mes, Ano, rz, matr, digitacao, foto, rz_ul_lv') 
           .eq('Ano', parseInt(filterAno, 10))
           .in('Mes', filterMeses);
         
@@ -164,89 +151,65 @@ const EvidenceAuditControl: React.FC = () => {
 
         query = query.range(from, from + step - 1);
         const { data: batch, error } = await query;
+        
         if (error) throw error;
         
         if (batch && batch.length > 0) {
-          allRecords.push(...batch);
-          batch.forEach(item => {
-            const inst = String(item.instalacao);
-            if (item.digitacao && Number(item.digitacao) >= 2) uniqueSolSet.add(inst);
-            if (item.foto === 'OK') uniqueReaSet.add(inst);
-          });
-          setFetchProgress(allRecords.length);
+          for (let i = 0; i < batch.length; i++) {
+            const item = batch[i];
+            const key = item.Mes + '|' + item.rz + '|' + item.matr + '|' + (item.rz_ul_lv || 'N/A');
+            let g = groupedMap.get(key);
+            if (!g) {
+              g = { 
+                mes: item.Mes, 
+                ano: item.Ano, 
+                rz: item.rz, 
+                ul: item.rz_ul_lv || 'N/A', 
+                matr: item.matr, 
+                sol: 0, 
+                rea: 0 
+              };
+              groupedMap.set(key, g);
+            }
+            if (item.digitacao && Number(item.digitacao) >= 2) g.sol++;
+            if (item.foto === 'OK') g.rea++;
+          }
+
           from += batch.length;
+          setFetchProgress(from);
+          if (batch.length < step) hasMore = false;
         } else {
           hasMore = false;
         }
-        if (from > 200000) break; 
       }
       
-      if (allRecords.length > 0) {
-        const groupedMap: Record<string, any> = {};
-        allRecords.forEach(item => {
-          const key = `${item.Mes}-${item.Ano}-${item.rz}-${item.matr}-${item.rz_ul_lv}`;
-          if (!groupedMap[key]) {
-            groupedMap[key] = {
-              mes: item.Mes,
-              ano: item.Ano,
-              rz: item.rz,
-              ul: item.rz_ul_lv || 'N/A',
-              matr: item.matr,
-              solicitadas: 0,
-              realizadas: 0
-            };
-          }
-          if (item.digitacao && Number(item.digitacao) >= 2) groupedMap[key].solicitadas++;
-          if (item.foto === 'OK') groupedMap[key].realizadas++;
-        });
-
-        const formatted: EvidenciaRecord[] = Object.values(groupedMap).map((g: any) => {
-          const sCount = g.solicitadas;
-          const rCount = g.realizadas;
-          return {
-            mes: g.mes,
-            ano: g.ano,
-            rz: g.rz,
-            ul: g.ul,
-            matr: g.matr,
-            solicitadas: sCount,
-            realizadas: rCount,
-            nao_realizadas: Math.max(0, sCount - rCount),
-            indicador: sCount > 0 ? (rCount / sCount) * 100 : 0
-          };
-        });
+      if (groupedMap.size > 0) {
+        const formatted: EvidenciaRecord[] = Array.from(groupedMap.values()).map((g: any) => ({
+          mes: g.mes, 
+          ano: g.ano, 
+          rz: g.rz, 
+          ul: g.ul, 
+          matr: g.matr,
+          solicitadas: g.sol, 
+          realizadas: g.rea, 
+          nao_realizadas: Math.max(0, g.sol - g.rea),
+          indicador: g.sol > 0 ? (g.rea / g.sol) * 100 : 0
+        }));
 
         setData(formatted);
-        
-        // Atualiza métricas com contagem única (Problema 1)
-        setSummaryMetrics({
-          sol: uniqueSolSet.size,
-          rea: uniqueReaSet.size,
-          nre: Math.max(0, uniqueSolSet.size - uniqueReaSet.size),
-          ind: uniqueSolSet.size > 0 ? (uniqueReaSet.size / uniqueSolSet.size) * 100 : 0
-        });
       }
       setHasGenerated(true);
     } catch (err: any) {
-      setConnectionError(`Erro: ${err.message}`);
+      setConnectionError(`Erro de Conexão: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleNovaConsulta = () => {
-    setFilterAno('');
-    setFilterMeses([]);
-    setFilterMatr('');
-    setFilterUlDe('');
-    setFilterUlPara('');
-    setData([]);
-    setSummaryMetrics({ sol: 0, rea: 0, nre: 0, ind: 0 });
-    setHasGenerated(false);
-    setFetchProgress(0);
-    setCurrentPage(1);
-    setValidationError(null);
-    setConnectionError(null);
+    setFilterAno(''); setFilterMeses([]); setFilterMatr(''); setFilterUlDe(''); setFilterUlPara('');
+    setData([]); setHasGenerated(false); setFetchProgress(0); setCurrentPage(1);
+    setValidationError(null); setConnectionError(null);
   };
 
   const currentSourceData = useMemo(() => {
@@ -254,35 +217,30 @@ const EvidenceAuditControl: React.FC = () => {
     data.forEach(item => {
       let key = activeTableTab === 'por_matricula' ? `${item.rz}-${item.matr}` : `${item.mes}-${item.ano}-${item.rz}`;
       if (!grouped[key]) {
-        grouped[key] = { 
-          rz: item.rz,
-          mes: item.mes,
-          ano: item.ano,
-          solicitadas: 0,
-          realizadas: 0,
-          matr: activeTableTab === 'por_matricula' ? item.matr : 'LOTE'
-        };
+        grouped[key] = { rz: item.rz, mes: item.mes, ano: item.ano, sol: 0, rea: 0, matr: activeTableTab === 'por_matricula' ? item.matr : 'LOTE' };
       }
-      grouped[key].solicitadas += item.solicitadas;
-      grouped[key].realizadas += item.realizadas;
+      grouped[key].sol += item.solicitadas;
+      grouped[key].rea += item.realizadas;
     });
 
-    return Object.values(grouped).map((g: any) => {
-      const sCount = g.solicitadas;
-      const rCount = g.realizadas;
-
-      return {
-        rz: g.rz,
-        mes: g.mes,
-        ano: g.ano,
-        matr: g.matr,
-        solicitadas: sCount,
-        realizadas: rCount,
-        nao_realizadas: Math.max(0, sCount - rCount),
-        indicador: sCount > 0 ? (rCount / sCount) * 100 : 0
-      };
-    }).sort((a, b) => b.indicador - a.indicador);
+    return Object.values(grouped).map((g: any) => ({
+      rz: g.rz, mes: g.mes, ano: g.ano, matr: g.matr, solicitadas: g.sol, realizadas: g.rea,
+      nao_realizadas: Math.max(0, g.sol - g.rea), indicador: g.sol > 0 ? (g.rea / g.sol) * 100 : 0
+    })).sort((a, b) => b.indicador - a.indicador);
   }, [data, activeTableTab]);
+
+  const summaryMetrics = useMemo(() => {
+    const totals = currentSourceData.reduce((acc, curr) => {
+      acc.sol += curr.solicitadas;
+      acc.rea += curr.realizadas;
+      return acc;
+    }, { sol: 0, rea: 0 });
+
+    const nre = Math.max(0, totals.sol - totals.rea);
+    const ind = totals.sol > 0 ? (totals.rea / totals.sol) * 100 : 0;
+
+    return { sol: totals.sol, rea: totals.rea, nre, ind };
+  }, [currentSourceData]);
 
   const chartData = useMemo(() => {
     const grouped: Record<string, { label: string, sol: number, rea: number }> = {};
@@ -292,22 +250,23 @@ const EvidenceAuditControl: React.FC = () => {
       grouped[key].sol += item.solicitadas;
       grouped[key].rea += item.realizadas;
     });
-    return Object.values(grouped).map(g => {
-      const sCount = g.sol;
-      const rCount = g.rea;
+    
+    const result = Object.values(grouped).map(g => ({
+      label: g.label, sol: g.sol, rea: g.rea, nre: Math.max(0, g.sol - g.rea), ind: g.sol > 0 ? (g.rea / g.sol) * 100 : 0
+    }));
 
-      return { label: g.label, sol: sCount, rea: rCount, nre: Math.max(0, sCount - rCount), ind: sCount > 0 ? (rCount / sCount) * 100 : 0 };
-    }).sort((a, b) => {
-      // Ordenação (Problema 2)
-      if (activeChartTab === 'mes') {
-         // Para meses, mantemos a ordem cronológica do calendário
-         const orderA = MONTH_ORDER[a.label] || 0;
-         const orderB = MONTH_ORDER[b.label] || 0;
-         return orderA - orderB;
-      }
-      // Para Matrícula ou Razão, ordenamos por volume de NÃO REALIZADAS (nre) decrescente
-      return b.nre - a.nre;
-    }).slice(0, 15);
+    if (activeChartTab === 'matr') {
+      // Ordenação por indicador crescente (menor para maior)
+      return result.sort((a, b) => a.ind - b.ind).slice(0, 20);
+    }
+
+    if (activeChartTab === 'razao') {
+      // Ordenação Alfabética A-Z
+      return result.sort((a, b) => a.label.localeCompare(b.label)).slice(0, 20);
+    }
+    
+    // Ordenação Cronológica para Meses
+    return result.sort((a, b) => (MONTH_ORDER[a.label] || 0) - (MONTH_ORDER[b.label] || 0)).slice(0, 20);
   }, [data, activeChartTab]);
 
   const totalPages = Math.max(1, Math.ceil(currentSourceData.length / ITEMS_PER_PAGE));
@@ -318,24 +277,42 @@ const EvidenceAuditControl: React.FC = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
-    doc.setFontSize(14);
-    doc.text("Controle de Evidências - Relação Quantitativa", 14, 15);
+    doc.setFontSize(14); doc.text("Controle de Evidências - Relação Quantitativa de Evidências", 14, 15);
+    const headers = activeTableTab === 'razao' 
+      ? [['RAZÃO', 'SOLICITADAS', 'REALIZADAS', 'NÃO REALIZADAS', 'INDICADOR (%)']]
+      : [['RAZÃO', 'MATRICULA', 'SOLICITADAS', 'REALIZADAS', 'NÃO REALIZADAS', 'INDICADOR (%)']];
     
+    const body = currentSourceData.map(r => {
+      const baseRow = [r.rz, r.solicitadas.toLocaleString(), r.realizadas.toLocaleString(), r.nao_realizadas.toLocaleString(), `${r.indicador.toFixed(2)}%`];
+      if (activeTableTab !== 'razao') baseRow.splice(1, 0, r.matr);
+      return baseRow;
+    });
+
     autoTable(doc, {
       startY: 20,
-      head: [['RAZÃO SOCIAL', 'MATRÍCULA', 'SOLICITADAS', 'REALIZADAS', 'NÃO REALIZADAS', 'INDICADOR (%)']],
-      body: currentSourceData.map(r => [
-        r.rz, r.matr, r.solicitadas, r.realizadas, r.nao_realizadas, `${r.indicador.toFixed(2)}%`
-      ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [15, 23, 42] }
+      head: headers,
+      body: body,
+      styles: { fontSize: 8 }, headStyles: { fillColor: [15, 23, 42] }
     });
-    
     doc.save("SAL_Relatorio_Evidencias.pdf");
   };
 
   return (
     <div className={`space-y-10 pb-20 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#f8fafc] overflow-y-auto p-10' : 'relative'}`}>
+      
+      {/* SEÇÃO DE FILTROS APLICADOS */}
+      <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
+          <Tag size={12} className="text-indigo-400" />
+          Filtros Aplicados:
+        </div>
+        {filterAno && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Ano: {filterAno}</span>}
+        {filterMeses.length > 0 && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Meses: {filterMeses.join(', ')}</span>}
+        {filterMatr && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Matricula: {filterMatr}</span>}
+        {filterUlDe && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">UL: {filterUlDe} a {filterUlPara || 'Fim'}</span>}
+        {!filterAno && !filterMeses.length && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-400 uppercase italic">Nenhum parâmetro selecionado</span>}
+      </div>
+
       {(connectionError || validationError) && (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-800 text-[11px] font-bold uppercase">
           <AlertCircle size={18} /> {connectionError || validationError}
@@ -368,7 +345,7 @@ const EvidenceAuditControl: React.FC = () => {
           <div className="space-y-2 relative" ref={dropdownRef}>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">MESES</label>
             <button onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold flex items-center justify-between hover:border-indigo-600 transition-all">
-              <span className="truncate">{filterMeses.length === 0 ? "Selecionar" : `${filterMeses.length} Selecionados`}</span>
+              <span className="truncate">{filterMeses.length === 0 ? "Selecionar" : `${filterMeses.length} mês(es)`}</span>
               <ChevronDown size={18} />
             </button>
             {isMonthDropdownOpen && (
@@ -384,9 +361,9 @@ const EvidenceAuditControl: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">TÉCNICO</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Matricula</label>
             <select value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all">
-              <option value="">Todos</option>
+              <option value="">Todas</option>
               {options.matriculas.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
             </select>
           </div>
@@ -417,18 +394,18 @@ const EvidenceAuditControl: React.FC = () => {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             <IndicatorCard label="Solicitadas" value={summaryMetrics.sol.toLocaleString()} icon={<FileText size={20}/>} color="blue" />
-            <IndicatorCard label="Realizadas (OK)" value={summaryMetrics.rea.toLocaleString()} icon={<Check size={20}/>} color="green" />
-            <IndicatorCard label="Não Realizadas (N-OK)" value={summaryMetrics.nre.toLocaleString()} icon={<AlertCircle size={20}/>} color="red" />
-            <IndicatorCard label="Eficiência Geral" value={summaryMetrics.ind.toFixed(2).replace('.',',')} suffix="%" icon={<TrendingUp size={20}/>} color="amber" />
+            <IndicatorCard label="Realizadas" value={summaryMetrics.rea.toLocaleString()} icon={<Check size={20}/>} color="green" />
+            <IndicatorCard label="Não Realizadas" value={summaryMetrics.nre.toLocaleString()} icon={<AlertCircle size={20}/>} color="red" />
+            <IndicatorCard label="Indicador Geral" value={summaryMetrics.ind.toFixed(2).replace('.',',')} suffix="%" icon={<TrendingUp size={20}/>} color="amber" />
           </div>
 
           <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-10 py-8 border-b flex flex-wrap items-center justify-between gap-6 bg-slate-50/30">
                <div className="flex flex-wrap items-center gap-6">
                   <div className="p-3 bg-white rounded-2xl shadow-sm border"><Camera size={24} className="text-indigo-600" /></div>
-                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-tighter italic">Controle de Evidências</h3>
+                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-tighter italic">Relação Quantitativa de Evidências</h3>
                   <div className="flex bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm ml-4">
-                      <button onClick={() => { setActiveTableTab('por_matricula'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'por_matricula' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Por Matrícula</button>
+                      <button onClick={() => { setActiveTableTab('por_matricula'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'por_matricula' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Matricula</button>
                       <button onClick={() => { setActiveTableTab('razao'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'razao' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Por Razão</button>
                    </div>
                 </div>
@@ -446,11 +423,11 @@ const EvidenceAuditControl: React.FC = () => {
                 </div>
              </div>
              <div className="overflow-x-auto p-10">
-                <table id="evidences-table-data" className="w-full text-[11px] border-collapse">
+                <table className="w-full text-[11px] border-collapse">
                    <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
                       <tr>
-                         <th className="px-6 py-5 border-x border-slate-100">RAZÃO SOCIAL</th>
-                         <th className="px-6 py-5 border-x border-slate-100">MATR</th>
+                         <th className="px-6 py-5 border-x border-slate-100">RAZÃO</th>
+                         {activeTableTab !== 'razao' && <th className="px-6 py-5 border-x border-slate-100">MATRICULA</th>}
                          <th className="px-6 py-5 border-x border-slate-100 text-center">SOLICITADAS</th>
                          <th className="px-6 py-5 border-x border-slate-100 text-center">REALIZADAS</th>
                          <th className="px-6 py-5 border-x border-slate-100 text-center">NÃO REALIZADAS</th>
@@ -461,7 +438,7 @@ const EvidenceAuditControl: React.FC = () => {
                       {paginatedData.map((row, idx) => (
                          <tr key={idx} className={`${row.indicador >= 90 ? 'bg-[#166534] text-white' : row.indicador >= 70 ? 'bg-[#854d0e] text-white' : 'bg-[#991b1b] text-white'} border-b border-white/10 hover:brightness-110 transition-all`}>
                             <td className="px-6 py-4 border-x border-white/5 font-black uppercase truncate max-w-[200px]">{row.rz}</td>
-                            <td className="px-6 py-4 border-x border-white/5 font-bold">{row.matr}</td>
+                            {activeTableTab !== 'razao' && <td className="px-6 py-4 border-x border-white/5 font-bold">{row.matr}</td>}
                             <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.solicitadas.toLocaleString()}</td>
                             <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.realizadas.toLocaleString()}</td>
                             <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.nao_realizadas.toLocaleString()}</td>
@@ -485,14 +462,16 @@ const EvidenceAuditControl: React.FC = () => {
               <div className="flex items-center gap-4">
                 <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm"><BarChart3 size={24} /></div>
                 <div>
-                  <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic leading-none">Visualização Grafica dos Resultados</h3>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Eficiência por Segmento</p>
+                  <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic leading-none">
+                    Visualização Grafica dos Resultados
+                  </h3>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Módulo de Performance</p>
                 </div>
               </div>
               <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
                  <button onClick={() => setActiveChartTab('mes')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'mes' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
                  <button onClick={() => setActiveChartTab('razao')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'razao' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Razão</button>
-                 <button onClick={() => setActiveChartTab('matr')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Matr</button>
+                 <button onClick={() => setActiveChartTab('matr')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Matricula</button>
               </div>
             </div>
 
@@ -527,7 +506,13 @@ const EvidenceAuditControl: React.FC = () => {
                       else if (entry.ind >= 70) color = '#854d0e';
                       return <Cell key={`cell-${index}`} fill={color} />;
                     })}
-                    <LabelList dataKey="ind" position="top" formatter={(v: number) => `${v.toFixed(2)}%`} style={{ fill: '#0f172a', fontSize: '10px', fontWeight: '900' }} offset={15} />
+                    <LabelList 
+                      dataKey="ind" 
+                      position="top" 
+                      formatter={(v: number) => `${v.toFixed(2)}%`} 
+                      style={{ fill: '#0f172a', fontSize: '11px', fontWeight: '900' }} 
+                      offset={15} 
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -545,7 +530,7 @@ const EvidenceAuditControl: React.FC = () => {
              </div>
              <div className="text-center">
                <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Análise de Evidências</h2>
-               <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Processando {fetchProgress.toLocaleString()} registros...</p>
+               <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Sincronizando Dataset ({fetchProgress.toLocaleString()} registros)...</p>
              </div>
           </div>
         </div>
