@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
   BarChart3, Users, LogOut, Bell, Globe, Camera,
-  UserCircle, Settings, HelpCircle, Activity
+  UserCircle, Settings, HelpCircle, Activity, 
+  CheckCircle2, ClipboardCheck, TrendingUp
 } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
@@ -60,23 +61,37 @@ const App: React.FC = () => {
         <div className="flex h-full flex-col">
           {/* Header Branding - Sidebar */}
           <div className="px-8 py-12 flex flex-col items-center text-center">
+            {/* Custom Created Logo illustrating 'Reading Analysis' */}
             <div className="relative group cursor-pointer mb-6">
-              <div className="absolute -inset-4 bg-indigo-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-              <img 
-                src="Logo.png" 
-                alt="SAL Logo" 
-                className="h-32 w-auto relative z-10 drop-shadow-[0_20px_30px_rgba(79,70,229,0.3)] transition-transform duration-500 group-hover:scale-105" 
-                onError={(e) => {
-                  e.currentTarget.src = 'https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/bar-chart-3.svg';
-                }}
-              />
+              <div className="absolute -inset-6 bg-emerald-500/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+              
+              <div className="relative z-10 w-24 h-24 flex items-center justify-center">
+                {/* Logo Composition */}
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-indigo-600 rounded-3xl rotate-12 group-hover:rotate-6 transition-transform duration-500 shadow-2xl shadow-indigo-500/40"></div>
+                <div className="absolute inset-0 bg-slate-950 rounded-3xl transition-transform duration-500 group-hover:scale-95 flex items-center justify-center overflow-hidden border border-white/10">
+                   <div className="relative">
+                      <BarChart3 size={40} className="text-emerald-400 opacity-80" />
+                      <div className="absolute -bottom-1 -right-1 bg-white p-1 rounded-lg text-indigo-600 shadow-lg scale-75 group-hover:scale-100 transition-transform">
+                        <Search size={16} strokeWidth={3} />
+                      </div>
+                   </div>
+                </div>
+                {/* Secondary Elements */}
+                <div className="absolute -top-2 -right-2 bg-emerald-500 text-white p-1.5 rounded-full shadow-lg border-2 border-[#020617] transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1">
+                  <CheckCircle2 size={16} strokeWidth={3} />
+                </div>
+                <div className="absolute -bottom-3 -left-3 bg-indigo-500 text-white p-1.5 rounded-xl shadow-lg border-2 border-[#020617] opacity-0 group-hover:opacity-100 transition-all duration-500">
+                  <TrendingUp size={16} strokeWidth={3} />
+                </div>
+              </div>
             </div>
+
             <div className="flex flex-col items-center">
               <h1 className="text-5xl font-black tracking-tighter text-white leading-none">
                 SAL
               </h1>
-              <div className="h-1 w-12 bg-indigo-500 my-4 rounded-full"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] max-w-[150px] leading-relaxed">
+              <div className="h-1 w-12 bg-emerald-500 my-4 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] max-w-[160px] leading-relaxed">
                 Sistema de Análise de Leitura
               </span>
             </div>
