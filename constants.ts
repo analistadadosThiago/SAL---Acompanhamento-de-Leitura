@@ -1,3 +1,4 @@
+
 export const IMPEDIMENTO_CODES = [
   "3201", "3205", "3245", "3301", "3312", "3313", "3369", "3370", "3374", "3379", 
   "3901", "3902", "3903", "3904", "3905", "3906", "3907", "3908", "5101", "5102", 
@@ -22,32 +23,31 @@ export const MONTH_ORDER: Record<string, number> = {
   "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
 };
 
+export const FALLBACK_MONTHS = [
+  "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", 
+  "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
+];
+
 export const SUPABASE_URL = "https://mzguwfuncsmgihzmeqoq.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_7ikVHkk3N6N7uv2-cmSsTg_VMgP9IMO";
 export const TABLE_NAME = "LeituraGeral";
 
-// RPCs - NÃO ALTERAR AS EXISTENTES NOS MENUS BLOQUEADOS
+// RPCs - PADRÃO SAL v9.0
 export const RPC_CL_FILTROS = "rpc_cl_filtros_leiturista";
 export const RPC_CL_TABELA_IMPEDIMENTOS = "rpc_controle_leiturista_impedimentos";
 export const RPC_CL_GRAFICO_IMPEDIMENTOS = "rpc_controle_leiturista_grafico_impedimentos";
 
-// RPCs CONTROLE DE EVIDÊNCIAS (REQUISITO V9 ATUAL)
+// RPCs CONTROLE DE EVIDÊNCIAS
 export const RPC_CE_FILTRADO = "rpc_controle_evidencias_filtrado";
 export const RPC_CE_POR_RAZAO = "rpc_controle_evidencias_por_razao";
-export const RPC_CE_TIPO_V9 = "rpc_controle_evidencias_filtrado";
 export const RPC_CE_IMPEDIMENTOS = "rpc_controle_evidencias_impedimentos";
 export const RPC_CE_SIMULACAO_NOSB = "rpc_controle_evidencias_simulacao";
+export const RPC_CE_TIPO_V9 = "rpc_controle_evidencias_tipo_v9";
 
-// RPCs DE VALIDAÇÃO DE FILTROS (REQUISITO V9)
+// RPCs DE VALIDAÇÃO DE FILTROS
 export const RPC_GET_ANOS = "get_anos_disponiveis";
+export const RPC_GET_ANOS_SIMPLES = "get_anos_simples";
 export const RPC_GET_MESES = "get_meses_disponiveis";
 export const RPC_GET_MATRICULAS = "get_matriculas_disponiveis";
-export const RPC_GET_ULS = "get_ul_disponiveis";
-
-// NOVAS RPCs SIMPLES PARA CONTROLE DE EVIDÊNCIAS
-export const RPC_GET_ANOS_SIMPLES = "get_anos_simples";
-export const RPC_GET_MESES_SIMPLES = "get_meses_simples";
-export const RPC_GET_MESES_DISTINCT = "get_meses_validos_distinct";
 export const RPC_GET_MATRICULAS_SIMPLES = "get_matriculas_simples";
-export const RPC_GET_TODOS_MESES = "get_todos_meses";
-export const RPC_GET_MESES_POR_ANO = "get_meses_por_ano";
+export const RPC_GET_ULS = "get_ul_disponiveis";

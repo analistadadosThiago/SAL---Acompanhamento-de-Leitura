@@ -157,14 +157,17 @@ const Dashboard: React.FC = () => {
     if (!indicators || loadingAi) return;
     setLoadingAi(true);
     try {
+      // Corrected: Initialization using named parameter apiKey from process.env.API_KEY
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const eff = (((indicators.leituras_totais - indicators.leituras_nao_realizadas) / (indicators.leituras_totais || 1)) * 100).toFixed(2);
       const prompt = `Analise os seguintes indicadores do SAL v9: Total de Leituras: ${indicators.leituras_totais}, Impedimentos: ${indicators.leituras_nao_realizadas}, Eficiência: ${eff}%. Identifique riscos de faturamento e proponha 3 ações de correção de campo em formato de tópicos executivos profissionais. Use um tom de consultor sênior de utilities.`;
 
+      // Corrected: Call generateContent directly using the correct model 'gemini-3-pro-preview'
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: prompt
       });
+      // Corrected: Use .text property (not a method) to access the generated text
       setAiInsights(response.text);
     } catch (err) {
       setAiInsights("Sistema de IA indisponível no momento.");

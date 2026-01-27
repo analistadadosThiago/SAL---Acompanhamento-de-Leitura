@@ -58,10 +58,11 @@ const EvidenceControl: React.FC = () => {
         ]);
         const anos = (resAnos.data || []).map((a: any) => String(a.ano || a)).sort((a: any, b: any) => Number(b) - Number(a));
         const mesesRaw = (resMeses.data || []).map((m: any) => String(m.mes || m).toUpperCase());
-        const mesesUnicos = Array.from(new Set(mesesRaw))
+        // Fix: Explicitly type mesesUnicos to avoid unknown inference issues
+        const mesesUnicos: { label: string; value: string }[] = Array.from(new Set(mesesRaw))
           .filter((m: string) => !!MONTH_MAP[m])
           .sort((a: string, b: string) => (MONTH_MAP[a] || 0) - (MONTH_MAP[b] || 0))
-          .map(m => ({ label: m, value: m }));
+          .map((m: string) => ({ label: m, value: m }));
         setOptions({ anos, meses: mesesUnicos });
       } catch (err) {
         console.error("Erro metadados:", err);
