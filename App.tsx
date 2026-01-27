@@ -40,7 +40,7 @@ const App: React.FC = () => {
   const getMenuTitle = () => {
     switch(activeMenu) {
       case Menu.INICIO: return 'Dashboard Operacional';
-      case Menu.CONSULTA_TECNICA: return 'Operational Query';
+      case Menu.CONSULTA_TECNICA: return 'Pesquisa de Dados';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
       case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
       default: return 'SAL Enterprise';
@@ -49,7 +49,7 @@ const App: React.FC = () => {
 
   const menuItems = [
     { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={18} /> },
-    { id: Menu.CONSULTA_TECNICA, label: 'Busca Técnica', icon: <Search size={18} /> },
+    { id: Menu.CONSULTA_TECNICA, label: 'Pesquisa', icon: <Search size={18} /> },
     { id: Menu.CONTROLE_LEITURISTA, label: 'Controle de Leiturista', icon: <Users size={18} /> },
     { id: Menu.CONTROLE_EVIDENCIAS, label: 'Controle de Evidências', icon: <Camera size={18} /> }
   ];
@@ -58,19 +58,21 @@ const App: React.FC = () => {
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#020617] text-white shadow-2xl transition-all duration-500 lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-full flex-col">
-          <div className="px-8 py-10">
-            <div className="flex items-center gap-4 group cursor-pointer">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-700 shadow-xl shadow-indigo-500/20 ring-1 ring-white/10 transition-all group-hover:rotate-6 group-hover:scale-110">
-                <BarChart3 size={24} className="text-white" />
-              </div>
+          <div className="px-8 py-10 flex flex-col items-center text-center">
+            <div className="group cursor-pointer">
+              <img 
+                src="Logo.png" 
+                alt="SAL Logo" 
+                className="h-20 w-auto mb-6 object-contain transition-transform group-hover:scale-105" 
+              />
               <div className="flex flex-col">
-                <span className="text-2xl font-black tracking-tight text-white leading-none">SAL <span className="text-indigo-400">v9.0</span></span>
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1.5">Enterprise Analysis</span>
+                <span className="text-4xl font-black tracking-tighter text-white leading-none">SAL</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Sistema de Análise de Leitura</span>
               </div>
             </div>
           </div>
           <nav className="flex-1 space-y-1 px-6 mt-4 overflow-y-auto custom-scrollbar">
-            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Core Modules</p>
+            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Menus</p>
             {menuItems.map((item) => (
               <button
                 key={item.id}
@@ -84,26 +86,14 @@ const App: React.FC = () => {
                 {item.label}
               </button>
             ))}
-            <div className="pt-10">
-              <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Support</p>
-              <button className="flex w-full items-center gap-4 px-4 py-3 text-xs font-bold text-slate-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
-                <Settings size={18} /> CONFIGURAÇÕES
-              </button>
-              <button className="flex w-full items-center gap-4 px-4 py-3 text-xs font-bold text-slate-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
-                <HelpCircle size={18} /> SUPORTE TÉCNICO
-              </button>
-            </div>
           </nav>
           <div className="p-6 border-t border-white/5">
-            <div className="bg-slate-900/40 rounded-2xl p-4 border border-white/5 mb-4">
+            <div className="bg-slate-900/40 rounded-2xl p-4 border border-white/5">
               <div className="flex items-center gap-3">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Node: Active</span>
               </div>
             </div>
-            <button className="flex w-full items-center justify-center gap-3 px-4 py-3 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">
-              <LogOut size={14} /> SAIR DO SISTEMA
-            </button>
           </div>
         </div>
       </aside>
@@ -133,10 +123,6 @@ const App: React.FC = () => {
              </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              <div className="flex items-center gap-3 pl-2 group cursor-pointer">
-                <div className="text-right hidden sm:block">
-                   <p className="text-xs font-black text-slate-900 leading-none group-hover:text-indigo-600 transition-colors">ANALISTA MASTER</p>
-                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">SUPER ADMIN</span>
-                </div>
                 <div className="h-11 w-11 rounded-2xl bg-slate-100 flex items-center justify-center border-2 border-slate-200 transition-all group-hover:border-indigo-500 group-hover:scale-105 overflow-hidden">
                   <UserCircle size={24} className="text-slate-400" />
                 </div>

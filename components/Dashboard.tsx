@@ -163,7 +163,22 @@ const Dashboard: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const eff = (((indicators.leituras_totais - indicators.leituras_nao_realizadas) / (indicators.leituras_totais || 1)) * 100).toFixed(2);
-      const prompt = `Analise os seguintes indicadores do SAL v9: Total de Leituras: ${indicators.leituras_totais}, Impedimentos: ${indicators.leituras_nao_realizadas}, Eficiência: ${eff}%. Identifique riscos de faturamento e proponha 3 ações de correção de campo em formato de tópicos executivos profissionais. Use um tom de consultor sênior de utilities.`;
+      
+      const prompt = `
+        Aja como um consultor sênior de utilities para o Sistema SAL (Sistema de Análise de Leitura). 
+        Analise os seguintes indicadores operacionais:
+        - Total de Leituras: ${indicators.leituras_totais}
+        - Leituras Não Realizadas (Impedimentos): ${indicators.leituras_nao_realizadas}
+        - Eficiência de Campo: ${eff}%
+        - Top Matrículas com mais impedimentos (Volume): ${JSON.stringify(graphData)}
+
+        Sua análise deve obrigatoriamente conter:
+        1. Identificação das Matrículas com maior indicador (risco operacional).
+        2. Discussão sobre quais os impedimentos mais comuns que podem estar afetando o faturamento.
+        3. Orientações executivas de como proceder para melhorias imediatas e controle de perdas.
+        
+        Mantenha um tom profissional, direto e focado em resultados de faturamento.
+      `;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
@@ -226,6 +241,10 @@ const Dashboard: React.FC = () => {
             <div className="relative z-10">
               <div className="flex items-center gap-5 mb-10">
                 <div className="p-4 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-600/30"><Sparkles size={30} className="text-white" /></div>
+                <div>
+                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Consultoria Estratégica SAL</h3>
+                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Análise de Redes Neurais v9.0</span>
+                </div>
               </div>
               
               {aiInsights ? (
@@ -234,9 +253,9 @@ const Dashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-8">
-                  <p className="text-slate-400 text-base max-w-2xl font-medium">O núcleo de análise neural está pronto para processar o lote atual e identificar inconsistências de faturamento, padrões de impedimento regionais e riscos técnicos.</p>
+                  <p className="text-slate-400 text-base max-w-2xl font-medium">Esta Inteligência faz parte do Sistema SAL e pretende fazer uma análise profunda dos resultados obtidos dentro do período acima selecionados.</p>
                   <button onClick={handleAiConsultancy} disabled={loadingAi} className="w-fit px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-500 shadow-2xl shadow-indigo-600/40 transition-all flex items-center gap-4">
-                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>INICIAR CONSULTORIA IA <Zap size={16} fill="currentColor"/></>}
+                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>INICIAR CONSULTORIA <Zap size={16} fill="currentColor"/></>}
                   </button>
                 </div>
               )}
