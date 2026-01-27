@@ -98,7 +98,11 @@ const Dashboard: React.FC = () => {
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [availableFilters, setAvailableFilters] = useState<FilterState>({ anos: [], meses: [], razoes: [] });
-  const [selectedFilters, setSelectedFilters] = useState({ ano: null as string | null, mes: null as string | null, razoes: [] as string[] });
+  const [selectedFilters, setSelectedFilters] = useState<{ano: string | null, mes: string | null, razoes: string[]}>({ 
+    ano: null, 
+    mes: null, 
+    razoes: [] 
+  });
 
   useEffect(() => {
     const fetchMetadata = async () => {
@@ -157,18 +161,15 @@ const Dashboard: React.FC = () => {
     if (!indicators || loadingAi) return;
     setLoadingAi(true);
     try {
-      // Corrected: Initialization using named parameter apiKey from process.env.API_KEY
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const eff = (((indicators.leituras_totais - indicators.leituras_nao_realizadas) / (indicators.leituras_totais || 1)) * 100).toFixed(2);
       const prompt = `Analise os seguintes indicadores do SAL v9: Total de Leituras: ${indicators.leituras_totais}, Impedimentos: ${indicators.leituras_nao_realizadas}, Eficiência: ${eff}%. Identifique riscos de faturamento e proponha 3 ações de correção de campo em formato de tópicos executivos profissionais. Use um tom de consultor sênior de utilities.`;
 
-      // Corrected: Call generateContent directly using the correct model 'gemini-3-pro-preview'
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: prompt
       });
-      // Corrected: Use .text property (not a method) to access the generated text
-      setAiInsights(response.text);
+      setAiInsights(response.text || "Análise finalizada sem texto de retorno.");
     } catch (err) {
       setAiInsights("Sistema de IA indisponível no momento.");
     } finally {
@@ -214,20 +215,19 @@ const Dashboard: React.FC = () => {
       {isReportGenerated && indicators && (
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <IndicatorCard label="Dataset Analisado" value={indicators.leituras_totais.toLocaleString()} icon={<FileText size={24}/>} color="blue" />
-            <IndicatorCard label="Não Realizadas" value={indicators.leituras_nao_realizadas.toLocaleString()} icon={<XCircle size={24}/>} color="red" />
-            <IndicatorCard label="Sucesso Operacional" value={(indicators.leituras_totais - indicators.leituras_nao_realizadas).toLocaleString()} icon={<CheckCircle size={24}/>} color="green" />
-            <IndicatorCard label="Taxa de Desvio" value={((indicators.leituras_nao_realizadas / (indicators.leituras_totais || 1)) * 100).toFixed(2).replace('.',',')} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
+            <IndicatorCard label="Dataset Analisado" value={(indicators.leituras_totais || 0).toLocaleString()} icon={<FileText size={24}/>} color="blue" />
+            <IndicatorCard label="Não Realizadas" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<XCircle size={24}/>} color="red" />
+            <IndicatorCard label="Sucesso Operacional" value={((indicators.leituras_totais || 0) - (indicators.leituras_nao_realizadas || 0)).toLocaleString()} icon={<CheckCircle size={24}/>} color="green" />
+            <IndicatorCard label="Taxa de Desvio" value={(( (indicators.leituras_nao_realizadas || 0) / (indicators.leituras_totais || 1)) * 100).toFixed(2).replace('.',',')} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
           </div>
 
-          {/* AI Insight Panel */}
           <div className="bg-[#0f172a] p-12 rounded-[4rem] text-white shadow-2xl border border-white/5 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-20 opacity-5 pointer-events-none rotate-12 transition-transform group-hover:scale-110"><BrainCircuit size={200} /></div>
             <div className="relative z-10">
               <div className="flex items-center gap-5 mb-10">
                 <div className="p-4 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-600/30"><Sparkles size={30} className="text-white" /></div>
                 <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tight italic italic">SAL Intelligence Core</h3>
+                  <h3 className="text-2xl font-black uppercase tracking-tight italic">SAL Intelligence Core</h3>
                   <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.4em] mt-1.5">Diagnóstico Preditivo v9.0</p>
                 </div>
               </div>

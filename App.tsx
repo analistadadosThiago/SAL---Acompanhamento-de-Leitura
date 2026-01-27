@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
@@ -42,7 +41,7 @@ const App: React.FC = () => {
       case Menu.INICIO: return 'Strategic Intelligence';
       case Menu.CONSULTA_TECNICA: return 'Operational Query';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
-      case Menu.CONTROLE_EVIDENCIAS: return 'CONTROLE DE EVIDÊNCIAS';
+      case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
       default: return 'SAL Enterprise';
     }
   };
@@ -51,21 +50,16 @@ const App: React.FC = () => {
     { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={18} /> },
     { id: Menu.CONSULTA_TECNICA, label: 'Busca Técnica', icon: <Search size={18} /> },
     { id: Menu.CONTROLE_LEITURISTA, label: 'Controle de Leiturista', icon: <Users size={18} /> },
-    { id: Menu.CONTROLE_EVIDENCIAS, label: 'CONTROLE DE EVIDÊNCIAS', icon: <Camera size={18} /> },
+    { id: Menu.CONTROLE_EVIDENCIAS, label: 'Controle de Evidências', icon: <Camera size={18} /> }
   ];
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
-      {/* Premium Corporate Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-[#020617] text-white shadow-2xl transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#020617] text-white shadow-2xl transition-all duration-500 lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-full flex-col">
-          {/* Brand Identity */}
           <div className="px-8 py-10">
             <div className="flex items-center gap-4 group cursor-pointer">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-700 shadow-xl shadow-indigo-500/20 ring-1 ring-white/10 transition-all group-hover:rotate-6 group-hover:scale-110">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-700 shadow-xl shadow-indigo-500/20 ring-1 ring-white/10 transition-all group-hover:rotate-6 group-hover:scale-110">
                 <BarChart3 size={24} className="text-white" />
               </div>
               <div className="flex flex-col">
@@ -74,8 +68,6 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* Navigational Hub */}
           <nav className="flex-1 space-y-1 px-6 mt-4 overflow-y-auto custom-scrollbar">
             <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Core Modules</p>
             {menuItems.map((item) => (
@@ -85,19 +77,12 @@ const App: React.FC = () => {
                   setActiveMenu(item.id);
                   if (window.innerWidth < 1024) setIsSidebarOpen(false);
                 }}
-                className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${
-                  activeMenu === item.id 
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                }`}
+                className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${activeMenu === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
               >
-                <span className={`${activeMenu === item.id ? 'text-white' : 'text-slate-500'}`}>
-                  {item.icon}
-                </span>
+                <span className={`${activeMenu === item.id ? 'text-white' : 'text-slate-50'}`}>{item.icon}</span>
                 {item.label}
               </button>
             ))}
-            
             <div className="pt-10">
               <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Support</p>
               <button className="flex w-full items-center gap-4 px-4 py-3 text-xs font-bold text-slate-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
@@ -108,8 +93,6 @@ const App: React.FC = () => {
               </button>
             </div>
           </nav>
-
-          {/* Sidebar Footer */}
           <div className="p-6 border-t border-white/5">
             <div className="bg-slate-900/40 rounded-2xl p-4 border border-white/5 mb-4">
               <div className="flex items-center gap-3">
@@ -123,10 +106,7 @@ const App: React.FC = () => {
           </div>
         </div>
       </aside>
-
-      {/* Main Experience Layer */}
       <main className="flex flex-1 flex-col overflow-hidden relative">
-        {/* Dynamic Header */}
         <header className={`flex h-20 items-center justify-between px-8 z-40 transition-all duration-300 ${scrolled ? 'bg-white/90 backdrop-blur-md shadow-sm border-b' : 'bg-transparent'}`}>
           <div className="flex items-center gap-6">
             <button onClick={toggleSidebar} className="lg:hidden text-slate-600 p-2.5 hover:bg-slate-100 rounded-xl transition-all">
@@ -138,13 +118,10 @@ const App: React.FC = () => {
               </h1>
               <div className="flex items-center gap-2 mt-0.5">
                  <Globe size={10} className="text-indigo-500" />
-                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                   Monitoramento de Rede em Tempo Real
-                 </p>
+                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Monitoramento de Rede em Tempo Real</p>
               </div>
             </div>
           </div>
-          
           <div className="flex items-center gap-5">
              <button className="hidden sm:flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-100 transition-all">
                <ShieldCheck size={14} /> SECURITY AUDIT: ON
@@ -165,12 +142,8 @@ const App: React.FC = () => {
              </div>
           </div>
         </header>
-
-        {/* Scalable Viewport Area */}
         <div id="main-viewport" className="flex-1 overflow-y-auto p-6 lg:p-10 custom-scrollbar scroll-smooth">
-          <div className="mx-auto max-w-7xl">
-            {renderContent()}
-          </div>
+          <div className="mx-auto max-w-7xl">{renderContent()}</div>
         </div>
       </main>
     </div>

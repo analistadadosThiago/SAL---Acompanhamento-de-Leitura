@@ -12,9 +12,9 @@ import {
   Activity, Check, ChevronDown, 
   Zap, Camera, Loader2, AlertCircle, RefreshCw,
   Maximize2, Minimize2, FileText, TrendingUp, BarChart3,
-  FileDown, Trash2
+  FileDown, Trash2, ClipboardList, Printer
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,6 +30,15 @@ interface EvidenciaRecord {
   nao_realizadas: number;
   matr: string;
   indicador: number;
+  solSet?: Set<string>;
+  reaSet?: Set<string>;
+}
+
+interface SummaryMetrics {
+  sol: number;
+  rea: number;
+  nre: number;
+  ind: number;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -38,16 +47,12 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-white p-5 rounded-3xl shadow-2xl border border-slate-100 text-[11px] min-w-[180px]">
+      <div className="bg-white p-5 rounded-3xl shadow-2xl border border-slate-100 text-[11px] min-w-[200px]">
         <p className="font-black text-slate-900 mb-3 border-b pb-2 uppercase tracking-tighter">{label}</p>
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <span className="font-bold text-slate-500 uppercase">Solicitadas:</span>
             <span className="text-slate-900 font-black">{data.sol.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-green-500 uppercase">Realizadas:</span>
-            <span className="text-green-700 font-black">{data.rea.toLocaleString()}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="font-bold text-red-500 uppercase">Não Realizadas:</span>
@@ -76,8 +81,8 @@ const EvidenceAuditControl: React.FC = () => {
   });
 
   const [data, setData] = useState<EvidenciaRecord[]>([]);
+  const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics>({ sol: 0, rea: 0, nre: 0, ind: 0 });
   const [loading, setLoading] = useState(false);
-  const [loadingFilters, setLoadingFilters] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -85,19 +90,17 @@ const EvidenceAuditControl: React.FC = () => {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [fetchProgress, setFetchProgress] = useState(0);
   
-  const [activeTableTab, setActiveTableTab] = useState<'completo' | 'razao'>('completo');
-  const [activeChartTab, setActiveChartTab] = useState<'mes' | 'ano' | 'matr'>('mes');
+  const [activeTableTab, setActiveTableTab] = useState<'por_matricula' | 'razao'>('por_matricula');
+  const [activeChartTab, setActiveChartTab] = useState<'mes' | 'razao' | 'matr'>('mes');
 
   const [currentPage, setCurrentPage] = useState(1);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadFilters = async () => {
-      setLoadingFilters(true);
       try {
         const { data: res, error } = await supabase.rpc(RPC_CL_FILTROS);
         if (error) throw error;
-        
         const filterData = Array.isArray(res) ? res[0] : res;
         if (filterData) {
           setOptions({
@@ -112,12 +115,8 @@ const EvidenceAuditControl: React.FC = () => {
           matriculas: [],
           meses: FALLBACK_MONTHS.map(m => ({ valor: m, label: m }))
         });
-        setConnectionError("Falha na carga rápida de filtros.");
-      } finally {
-        setLoadingFilters(false);
       }
     };
-
     loadFilters();
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -126,9 +125,7 @@ const EvidenceAuditControl: React.FC = () => {
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleGenerate = async () => {
@@ -147,8 +144,12 @@ const EvidenceAuditControl: React.FC = () => {
     try {
       const allRecords: any[] = [];
       let from = 0;
-      const step = 2000;
+      const step = 5000;
       let hasMore = true;
+
+      // Sets para contagem de instalações únicas (Problema 1)
+      const uniqueSolSet = new Set<string>();
+      const uniqueReaSet = new Set<string>();
 
       while (hasMore) {
         let query = supabase
@@ -162,24 +163,26 @@ const EvidenceAuditControl: React.FC = () => {
         if (filterUlPara) query = query.lte('rz_ul_lv', filterUlPara);
 
         query = query.range(from, from + step - 1);
-
         const { data: batch, error } = await query;
         if (error) throw error;
         
         if (batch && batch.length > 0) {
           allRecords.push(...batch);
+          batch.forEach(item => {
+            const inst = String(item.instalacao);
+            if (item.digitacao && Number(item.digitacao) >= 2) uniqueSolSet.add(inst);
+            if (item.foto === 'OK') uniqueReaSet.add(inst);
+          });
           setFetchProgress(allRecords.length);
           from += batch.length;
         } else {
           hasMore = false;
         }
-        
         if (from > 200000) break; 
       }
       
       if (allRecords.length > 0) {
         const groupedMap: Record<string, any> = {};
-
         allRecords.forEach(item => {
           const key = `${item.Mes}-${item.Ano}-${item.rz}-${item.matr}-${item.rz_ul_lv}`;
           if (!groupedMap[key]) {
@@ -190,35 +193,42 @@ const EvidenceAuditControl: React.FC = () => {
               ul: item.rz_ul_lv || 'N/A',
               matr: item.matr,
               solicitadas: 0,
-              uniqueInstalsRealizadas: new Set<string>(),
-              uniqueInstalsNaoRealizadas: new Set<string>() 
+              realizadas: 0
             };
           }
-
-          if (item.digitacao && Number(item.digitacao) >= 2) {
-            groupedMap[key].solicitadas++;
-          }
-          
-          if (item.foto === 'OK') {
-            groupedMap[key].uniqueInstalsRealizadas.add(item.instalacao);
-          } else if (item.foto === 'N-OK') {
-            groupedMap[key].uniqueInstalsNaoRealizadas.add(item.instalacao);
-          }
+          if (item.digitacao && Number(item.digitacao) >= 2) groupedMap[key].solicitadas++;
+          if (item.foto === 'OK') groupedMap[key].realizadas++;
         });
 
-        const formatted: EvidenciaRecord[] = Object.values(groupedMap).map((g: any) => ({
-          ...g,
-          realizadas: g.uniqueInstalsRealizadas.size,
-          nao_realizadas: g.uniqueInstalsNaoRealizadas.size,
-          indicador: g.solicitadas > 0 ? (g.uniqueInstalsRealizadas.size / g.solicitadas) * 100 : 0
-        })).sort((a, b) => a.indicador - b.indicador);
+        const formatted: EvidenciaRecord[] = Object.values(groupedMap).map((g: any) => {
+          const sCount = g.solicitadas;
+          const rCount = g.realizadas;
+          return {
+            mes: g.mes,
+            ano: g.ano,
+            rz: g.rz,
+            ul: g.ul,
+            matr: g.matr,
+            solicitadas: sCount,
+            realizadas: rCount,
+            nao_realizadas: Math.max(0, sCount - rCount),
+            indicador: sCount > 0 ? (rCount / sCount) * 100 : 0
+          };
+        });
 
         setData(formatted);
+        
+        // Atualiza métricas com contagem única (Problema 1)
+        setSummaryMetrics({
+          sol: uniqueSolSet.size,
+          rea: uniqueReaSet.size,
+          nre: Math.max(0, uniqueSolSet.size - uniqueReaSet.size),
+          ind: uniqueSolSet.size > 0 ? (uniqueReaSet.size / uniqueSolSet.size) * 100 : 0
+        });
       }
       setHasGenerated(true);
     } catch (err: any) {
-      console.error("ERRO INTEGRAL:", err);
-      setConnectionError(`Erro de conexão: ${err.message}`);
+      setConnectionError(`Erro: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -231,6 +241,7 @@ const EvidenceAuditControl: React.FC = () => {
     setFilterUlDe('');
     setFilterUlPara('');
     setData([]);
+    setSummaryMetrics({ sol: 0, rea: 0, nre: 0, ind: 0 });
     setHasGenerated(false);
     setFetchProgress(0);
     setCurrentPage(1);
@@ -238,114 +249,93 @@ const EvidenceAuditControl: React.FC = () => {
     setConnectionError(null);
   };
 
-  const exportToPDF = () => {
-    if (currentSourceData.length === 0) return;
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const tableData = paginatedData.map(d => [
-        d.rz,
-        d.matr,
-        d.solicitadas.toLocaleString(),
-        d.realizadas.toLocaleString(),
-        d.nao_realizadas.toLocaleString(),
-        `${d.indicador.toFixed(2).replace('.', ',')}%`
-      ]);
-      
-      autoTable(doc, {
-        head: [['RAZÃO', 'MATR', 'SOLICITADAS', 'REALIZADAS', 'NÃO REALIZADAS', 'EFICIÊNCIA']],
-        body: tableData,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [79, 70, 229] },
-        margin: { top: 20 },
-        didDrawPage: (data) => {
-          doc.text("SAL - Relatório Analítico de Evidências", data.settings.margin.left, 10);
-        }
-      });
-      doc.save("SAL_Relatorio_Evidencias.pdf");
-    } catch (error) {
-      console.error("PDF Error:", error);
-    }
-  };
-
-  const totals = useMemo(() => {
-    if (!data.length) return { sol: 0, rea: 0, nre: 0, ind: 0 };
-    const t = data.reduce((acc, c) => ({
-      sol: acc.sol + c.solicitadas,
-      rea: acc.rea + c.realizadas,
-      nre: acc.nre + c.nao_realizadas
-    }), { sol: 0, rea: 0, nre: 0 });
-    
-    return { ...t, ind: t.sol > 0 ? (t.rea / t.sol) * 100 : 0 };
-  }, [data]);
-
   const currentSourceData = useMemo(() => {
-    if (activeTableTab === 'completo') return data;
-    
     const grouped: Record<string, any> = {};
     data.forEach(item => {
-      const key = `${item.mes}-${item.ano}-${item.rz}`;
+      let key = activeTableTab === 'por_matricula' ? `${item.rz}-${item.matr}` : `${item.mes}-${item.ano}-${item.rz}`;
       if (!grouped[key]) {
-        grouped[key] = { ...item, solicitadas: 0, realizadas: 0, nao_realizadas: 0, matr: 'LOTE', ul: 'VÁRIAS' };
+        grouped[key] = { 
+          rz: item.rz,
+          mes: item.mes,
+          ano: item.ano,
+          solicitadas: 0,
+          realizadas: 0,
+          matr: activeTableTab === 'por_matricula' ? item.matr : 'LOTE'
+        };
       }
       grouped[key].solicitadas += item.solicitadas;
       grouped[key].realizadas += item.realizadas;
-      grouped[key].nao_realizadas += item.nao_realizadas;
     });
 
-    return Object.values(grouped).map((g: any) => ({
-      ...g,
-      indicador: g.solicitadas > 0 ? (g.realizadas / g.solicitadas) * 100 : 0
-    })).sort((a, b) => a.indicador - b.indicador);
+    return Object.values(grouped).map((g: any) => {
+      const sCount = g.solicitadas;
+      const rCount = g.realizadas;
+
+      return {
+        rz: g.rz,
+        mes: g.mes,
+        ano: g.ano,
+        matr: g.matr,
+        solicitadas: sCount,
+        realizadas: rCount,
+        nao_realizadas: Math.max(0, sCount - rCount),
+        indicador: sCount > 0 ? (rCount / sCount) * 100 : 0
+      };
+    }).sort((a, b) => b.indicador - a.indicador);
   }, [data, activeTableTab]);
 
   const chartData = useMemo(() => {
-    const grouped: Record<string, { label: string, sol: number, rea: number, nre: number, ind: number, count: number }> = {};
-    
+    const grouped: Record<string, { label: string, sol: number, rea: number }> = {};
     data.forEach(item => {
-      let key = '';
-      if (activeChartTab === 'mes') key = item.mes;
-      else if (activeChartTab === 'ano') key = String(item.ano);
-      else if (activeChartTab === 'matr') key = item.matr;
-
-      if (!grouped[key]) {
-        grouped[key] = { label: key, sol: 0, rea: 0, nre: 0, ind: 0, count: 0 };
-      }
+      let key = activeChartTab === 'mes' ? item.mes : activeChartTab === 'razao' ? item.rz : item.matr;
+      if (!grouped[key]) grouped[key] = { label: key, sol: 0, rea: 0 };
       grouped[key].sol += item.solicitadas;
       grouped[key].rea += item.realizadas;
-      grouped[key].nre += item.nao_realizadas;
-      grouped[key].count += 1;
     });
+    return Object.values(grouped).map(g => {
+      const sCount = g.sol;
+      const rCount = g.rea;
 
-    return Object.values(grouped)
-      .map(g => ({
-        ...g,
-        ind: g.sol > 0 ? (g.rea / g.sol) * 100 : 0
-      }))
-      .sort((a, b) => {
-        if (activeChartTab === 'mes') return (MONTH_ORDER[a.label] || 0) - (MONTH_ORDER[b.label] || 0);
-        if (activeChartTab === 'matr') return b.ind - a.ind;
-        return Number(b.label) - Number(a.label);
-      })
-      .slice(0, 15);
+      return { label: g.label, sol: sCount, rea: rCount, nre: Math.max(0, sCount - rCount), ind: sCount > 0 ? (rCount / sCount) * 100 : 0 };
+    }).sort((a, b) => {
+      // Ordenação (Problema 2)
+      if (activeChartTab === 'mes') {
+         // Para meses, mantemos a ordem cronológica do calendário
+         const orderA = MONTH_ORDER[a.label] || 0;
+         const orderB = MONTH_ORDER[b.label] || 0;
+         return orderA - orderB;
+      }
+      // Para Matrícula ou Razão, ordenamos por volume de NÃO REALIZADAS (nre) decrescente
+      return b.nre - a.nre;
+    }).slice(0, 15);
   }, [data, activeChartTab]);
 
-  const totalRecords = currentSourceData.length;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / ITEMS_PER_PAGE));
-  
+  const totalPages = Math.max(1, Math.ceil(currentSourceData.length / ITEMS_PER_PAGE));
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return currentSourceData.slice(start, start + ITEMS_PER_PAGE);
   }, [currentSourceData, currentPage]);
 
-  const getIndicatorColor = (indicador: number) => {
-    if (indicador >= 90) return 'bg-[#166534] text-white';
-    if (indicador >= 70) return 'bg-[#854d0e] text-white';
-    return 'bg-[#991b1b] text-white';
+  const handleExportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(14);
+    doc.text("Controle de Evidências - Relação Quantitativa", 14, 15);
+    
+    autoTable(doc, {
+      startY: 20,
+      head: [['RAZÃO SOCIAL', 'MATRÍCULA', 'SOLICITADAS', 'REALIZADAS', 'NÃO REALIZADAS', 'INDICADOR (%)']],
+      body: currentSourceData.map(r => [
+        r.rz, r.matr, r.solicitadas, r.realizadas, r.nao_realizadas, `${r.indicador.toFixed(2)}%`
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [15, 23, 42] }
+    });
+    
+    doc.save("SAL_Relatorio_Evidencias.pdf");
   };
 
   return (
     <div className={`space-y-10 pb-20 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#f8fafc] overflow-y-auto p-10' : 'relative'}`}>
-      
       {(connectionError || validationError) && (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-800 text-[11px] font-bold uppercase">
           <AlertCircle size={18} /> {connectionError || validationError}
@@ -355,9 +345,9 @@ const EvidenceAuditControl: React.FC = () => {
       <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-500/20"><Filter size={20} /></div>
+            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-500/20"><ClipboardList size={20} /></div>
             <div>
-              <h2 className="text-xl font-black text-slate-900 uppercase italic">Selecione os dados a serem Analisados</h2>
+              <h2 className="text-xl font-black text-slate-900 uppercase italic">Controle de Evidências</h2>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronização de Campo v9.0</p>
             </div>
           </div>
@@ -382,7 +372,7 @@ const EvidenceAuditControl: React.FC = () => {
               <ChevronDown size={18} />
             </button>
             {isMonthDropdownOpen && (
-              <div className="absolute z-[60] top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2 custom-scrollbar animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="absolute z-[60] top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2 custom-scrollbar">
                 {options.meses.map(o => (
                   <div key={o.valor} onClick={() => setFilterMeses(p => p.includes(o.valor) ? p.filter(v => v !== o.valor) : [...p, o.valor])} className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all ${filterMeses.includes(o.valor) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
                     <span className="text-xs uppercase font-bold">{o.label}</span>
@@ -403,26 +393,12 @@ const EvidenceAuditControl: React.FC = () => {
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">UL DE:</label>
-            <input 
-              type="text" 
-              value={filterUlDe} 
-              maxLength={8}
-              placeholder="Ex: 1000"
-              onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, '').slice(0, 8))} 
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all" 
-            />
+            <input type="text" value={filterUlDe} maxLength={8} placeholder="Ex: 1000" onChange={e => setFilterUlDe(e.target.value.replace(/\D/g, '').slice(0, 8))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all" />
           </div>
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">UL PARA:</label>
-            <input 
-              type="text" 
-              value={filterUlPara} 
-              maxLength={8}
-              placeholder="Ex: 2000"
-              onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, '').slice(0, 8))} 
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all" 
-            />
+            <input type="text" value={filterUlPara} maxLength={8} placeholder="Ex: 2000" onChange={e => setFilterUlPara(e.target.value.replace(/\D/g, '').slice(0, 8))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all" />
           </div>
         </div>
 
@@ -431,99 +407,71 @@ const EvidenceAuditControl: React.FC = () => {
             {loading ? <RefreshCw className="animate-spin" /> : <Zap size={20} fill="currentColor" />}
             Gerar Relatório
           </button>
-          
           <button onClick={handleNovaConsulta} className="px-10 py-5 bg-slate-100 text-slate-500 rounded-[2rem] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200">
             <Trash2 size={16} /> Nova Consulta
           </button>
-
-          {loading && (
-             <div className="flex flex-col items-center">
-               <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] animate-pulse">
-                 <Loader2 size={16} className="animate-spin"/> {fetchProgress.toLocaleString()} REGISTROS RECUPERADOS
-               </div>
-             </div>
-          )}
         </div>
       </section>
 
       {hasGenerated && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
-          <IndicatorCard label="Solicitadas" value={totals.sol.toLocaleString()} icon={<FileText size={20}/>} color="blue" />
-          <IndicatorCard label="Realizadas (OK)" value={totals.rea.toLocaleString()} icon={<Check size={20}/>} color="green" />
-          <IndicatorCard label="Não Realizadas (N-OK)" value={totals.nre.toLocaleString()} icon={<AlertCircle size={20}/>} color="red" />
-          <IndicatorCard label="Eficiência de Campo" value={totals.ind.toFixed(2).replace('.',',')} suffix="%" icon={<TrendingUp size={20}/>} color="amber" />
-        </div>
-      )}
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <IndicatorCard label="Solicitadas" value={summaryMetrics.sol.toLocaleString()} icon={<FileText size={20}/>} color="blue" />
+            <IndicatorCard label="Realizadas (OK)" value={summaryMetrics.rea.toLocaleString()} icon={<Check size={20}/>} color="green" />
+            <IndicatorCard label="Não Realizadas (N-OK)" value={summaryMetrics.nre.toLocaleString()} icon={<AlertCircle size={20}/>} color="red" />
+            <IndicatorCard label="Eficiência Geral" value={summaryMetrics.ind.toFixed(2).replace('.',',')} suffix="%" icon={<TrendingUp size={20}/>} color="amber" />
+          </div>
 
-      {hasGenerated && (
-        <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
           <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-10 py-8 border-b flex flex-wrap items-center justify-between gap-6 bg-slate-50/30">
                <div className="flex flex-wrap items-center gap-6">
                   <div className="p-3 bg-white rounded-2xl shadow-sm border"><Camera size={24} className="text-indigo-600" /></div>
-                  <div>
-                    <h3 className="text-sm font-black uppercase text-slate-900 tracking-tighter italic">Relação Quantitativa de Dados</h3>
-                  </div>
-                  
+                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-tighter italic">Controle de Evidências</h3>
                   <div className="flex bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm ml-4">
-                      <button onClick={() => { setActiveTableTab('completo'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'completo' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Geral</button>
+                      <button onClick={() => { setActiveTableTab('por_matricula'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'por_matricula' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Por Matrícula</button>
                       <button onClick={() => { setActiveTableTab('razao'); setCurrentPage(1); }} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTableTab === 'razao' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Por Razão</button>
                    </div>
-               </div>
-               <div className="flex gap-4">
-                 <button onClick={() => { 
-                    const source = activeTableTab === 'completo' ? data : currentSourceData;
-                    const dataToExport = source.map(d => ({
-                      "RAZÃO": d.rz,
-                      "MATR": d.matr,
-                      "SOLICITADAS": d.solicitadas,
-                      "REALIZADAS": d.realizadas,
-                      "NÃO REALIZADAS": d.nao_realizadas,
-                      "EFICIÊNCIA (%)": d.indicador.toFixed(2)
-                    }));
-                    const ws = XLSX.utils.json_to_sheet(dataToExport); 
-                    const wb = XLSX.utils.book_new(); 
-                    XLSX.utils.book_append_sheet(wb, ws, "Auditoria_Export"); 
-                    XLSX.writeFile(wb, `SAL_Auditoria_Integral.xlsx`); 
-                  }} className="px-6 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition-all">Exportar Excel</button>
-                  
-                  <button onClick={exportToPDF} className="px-6 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-black uppercase border border-blue-100 hover:bg-blue-100 transition-all flex items-center gap-2">
-                    <FileDown size={14} /> Exportar PDF
-                  </button>
-               </div>
-            </div>
-            
-            <div className="overflow-x-auto p-10 max-h-[600px] custom-scrollbar">
-              <table className="w-full text-[11px] border-collapse">
-                <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
-                  <tr>
-                    <th className="px-6 py-4 text-left">RAZÃO</th>
-                    <th className="px-6 py-4 text-center">MATR</th>
-                    <th className="px-6 py-4 text-center">SOLICITADAS</th>
-                    <th className="px-6 py-4 text-center">REALIZADAS</th>
-                    <th className="px-6 py-4 text-center">NÃO REALIZADAS</th>
-                    <th className="px-6 py-4 text-right font-black">EFICIÊNCIA</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {paginatedData.map((row, idx) => (
-                    <tr key={idx} className={`${getIndicatorColor(row.indicador)} transition-all hover:brightness-110`}>
-                      <td className="px-6 py-4 text-left font-black uppercase truncate max-w-[250px]">{row.rz}</td>
-                      <td className="px-6 py-4 text-center font-bold">{row.matr}</td>
-                      <td className="px-6 py-4 text-center font-bold">{row.solicitadas.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-center font-bold">{row.realizadas.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-center font-bold">{row.nao_realizadas.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-black italic">{row.indicador.toFixed(2).replace('.', ',')}%</td>
-                    </tr>
-                  ))}
-                  {paginatedData.length === 0 && (
-                    <tr><td colSpan={6} className="py-20 text-center font-bold text-slate-400 uppercase tracking-widest">Dataset Vazio</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="px-10 py-6 border-t flex items-center justify-between bg-slate-50/50">
+                </div>
+                <div className="flex items-center gap-3">
+                   <button onClick={handleExportPDF} className="flex items-center gap-2 px-6 py-3 bg-rose-50 text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100">
+                     <Printer size={16} /> PDF
+                   </button>
+                   <button onClick={() => {
+                     const ws = XLSX.utils.json_to_sheet(currentSourceData);
+                     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SAL_Evidencias");
+                     XLSX.writeFile(wb, "SAL_Relatorio_Evidencias.xlsx");
+                   }} className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100">
+                     <FileDown size={16} /> EXCEL
+                   </button>
+                </div>
+             </div>
+             <div className="overflow-x-auto p-10">
+                <table id="evidences-table-data" className="w-full text-[11px] border-collapse">
+                   <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
+                      <tr>
+                         <th className="px-6 py-5 border-x border-slate-100">RAZÃO SOCIAL</th>
+                         <th className="px-6 py-5 border-x border-slate-100">MATR</th>
+                         <th className="px-6 py-5 border-x border-slate-100 text-center">SOLICITADAS</th>
+                         <th className="px-6 py-5 border-x border-slate-100 text-center">REALIZADAS</th>
+                         <th className="px-6 py-5 border-x border-slate-100 text-center">NÃO REALIZADAS</th>
+                         <th className="px-6 py-5 border-x border-slate-100 text-right font-black">INDICADOR</th>
+                      </tr>
+                   </thead>
+                   <tbody>
+                      {paginatedData.map((row, idx) => (
+                         <tr key={idx} className={`${row.indicador >= 90 ? 'bg-[#166534] text-white' : row.indicador >= 70 ? 'bg-[#854d0e] text-white' : 'bg-[#991b1b] text-white'} border-b border-white/10 hover:brightness-110 transition-all`}>
+                            <td className="px-6 py-4 border-x border-white/5 font-black uppercase truncate max-w-[200px]">{row.rz}</td>
+                            <td className="px-6 py-4 border-x border-white/5 font-bold">{row.matr}</td>
+                            <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.solicitadas.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.realizadas.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.nao_realizadas.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-right border-x border-white/5 font-black text-[13px] italic">{row.indicador.toFixed(2)}%</td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+             </div>
+             <div className="px-10 py-6 border-t flex items-center justify-between bg-slate-50/50">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</p>
                 <div className="flex gap-4">
                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-600 transition-all disabled:opacity-30"><ChevronLeft size={18}/></button>
@@ -533,73 +481,59 @@ const EvidenceAuditControl: React.FC = () => {
           </section>
 
           <section className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-200">
-             <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-8">
-                <div className="flex items-center gap-5">
-                   <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm"><BarChart3 size={24} /></div>
-                   <div>
-                      <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic leading-none">Análise Gráfica de Performance</h3>
-                   </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6">
+              <div className="flex items-center gap-4">
+                <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm"><BarChart3 size={24} /></div>
+                <div>
+                  <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic leading-none">Visualização Grafica dos Resultados</h3>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Eficiência por Segmento</p>
                 </div>
+              </div>
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
+                 <button onClick={() => setActiveChartTab('mes')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'mes' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
+                 <button onClick={() => setActiveChartTab('razao')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'razao' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Razão</button>
+                 <button onClick={() => setActiveChartTab('matr')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Matr</button>
+              </div>
+            </div>
 
-                <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200">
-                   <button onClick={() => setActiveChartTab('mes')} className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'mes' ? 'bg-white text-indigo-600 shadow-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
-                   <button onClick={() => setActiveChartTab('ano')} className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'ano' ? 'bg-white text-indigo-600 shadow-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}>Ano</button>
-                   <button onClick={() => setActiveChartTab('matr')} className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}>Matr</button>
-                </div>
-             </div>
+            <div className="flex flex-wrap items-center gap-8 mb-10 px-8 py-5 bg-slate-50/70 rounded-[2rem] border border-slate-200">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Legenda de Performance:</span>
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded-md bg-[#166534] shadow-sm"></div>
+                <span className="text-[10px] font-black text-slate-700 uppercase">Bom (≥ 90%)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded-md bg-[#854d0e] shadow-sm"></div>
+                <span className="text-[10px] font-black text-slate-700 uppercase">Médio (70-89%)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded-md bg-[#991b1b] shadow-sm"></div>
+                <span className="text-[10px] font-black text-slate-700 uppercase">Ruim (&lt; 70%)</span>
+              </div>
+            </div>
 
-             <div className="h-[450px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={chartData} margin={{ top: 30, right: 30, left: 10, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                      <Tooltip content={<CustomChartTooltip />} cursor={{fill: '#f8fafc', radius: 15}} />
-                      <Bar dataKey="ind" name="Eficiência (%)" barSize={50} radius={[15, 15, 0, 0]}>
-                         {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.ind >= 90 ? '#166534' : entry.ind >= 70 ? '#b45309' : '#991b1b'} />
-                         ))}
-                         <LabelList 
-                            dataKey="ind" 
-                            position="top" 
-                            content={(props: any) => {
-                                const { x, y, value } = props;
-                                return (
-                                    <text x={x + 25} y={y - 12} fill="#1e293b" fontSize="11px" fontWeight="900" textAnchor="middle">
-                                        {value.toFixed(1)}%
-                                    </text>
-                                );
-                            }}
-                         />
-                      </Bar>
-                   </BarChart>
-                </ResponsiveContainer>
-             </div>
-             
-             <div className="mt-10 pt-10 border-t border-slate-100 flex flex-wrap justify-center gap-10">
-                <div className="flex items-center gap-3">
-                   <div className="h-4 w-4 rounded-full bg-[#166534]"></div>
-                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Excelente (&gt;90%)</span>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="h-4 w-4 rounded-full bg-[#b45309]"></div>
-                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Atenção (70-90%)</span>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="h-4 w-4 rounded-full bg-[#991b1b]"></div>
-                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Crítico (&lt;70%)</span>
-                </div>
-             </div>
+            <div className="h-[450px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                  <Tooltip content={<CustomChartTooltip />} cursor={{fill: '#f8fafc', radius: 12}} />
+                  <Legend iconType="circle" />
+                  <Bar dataKey="nre" name="Não Realizadas" barSize={40} radius={[8, 8, 0, 0]}>
+                    {chartData.map((entry, index) => {
+                      let color = '#991b1b';
+                      if (entry.ind >= 90) color = '#166534';
+                      else if (entry.ind >= 70) color = '#854d0e';
+                      return <Cell key={`cell-${index}`} fill={color} />;
+                    })}
+                    <LabelList dataKey="ind" position="top" formatter={(v: number) => `${v.toFixed(2)}%`} style={{ fill: '#0f172a', fontSize: '10px', fontWeight: '900' }} offset={15} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </section>
-        </div>
-      )}
-
-      {!hasGenerated && !loading && (
-        <div className="flex flex-col items-center justify-center py-40 border-2 border-dashed border-slate-200 rounded-[3rem] bg-white text-center">
-          <Activity className="text-slate-100 mb-6" size={80} />
-          <h3 className="text-lg font-black text-slate-300 uppercase tracking-[0.4em] italic">Análise Pendente</h3>
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4 px-20">Aguardando parametrização para materializar o Dataset de Auditoria.</p>
-        </div>
+        </>
       )}
 
       {loading && (
@@ -607,11 +541,11 @@ const EvidenceAuditControl: React.FC = () => {
           <div className="bg-white p-16 rounded-[4rem] shadow-2xl flex flex-col items-center gap-8 border border-slate-100">
              <div className="relative h-24 w-24">
                 <div className="absolute inset-0 rounded-full border-[8px] border-slate-50 border-t-indigo-600 animate-spin"></div>
-                <Activity size={32} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
+                <Loader2 size={32} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
              </div>
              <div className="text-center">
-               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Sincronização de Matriz</h2>
-               <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Sincronizando Core v9.0...</p>
+               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Análise de Evidências</h2>
+               <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Processando {fetchProgress.toLocaleString()} registros...</p>
              </div>
           </div>
         </div>

@@ -34,7 +34,7 @@ const IndicatorCard: React.FC<IndicatorCardProps> = ({ label, value, icon, color
       text: 'text-amber-900', 
       bg: 'bg-white', 
       iconBg: 'bg-amber-50 text-amber-600' 
-    },
+    }
   };
 
   const currentTheme = colorMap[color] || colorMap.blue;
@@ -53,7 +53,6 @@ const IndicatorCard: React.FC<IndicatorCardProps> = ({ label, value, icon, color
         </div>
         {icon && (
           <div className={`p-3 rounded-xl ${currentTheme.iconBg} transition-transform group-hover:scale-110`}>
-            {/* Fix: Use any to allow size property in cloneElement */}
             {React.cloneElement(icon as React.ReactElement<any>, { size: 20 })}
           </div>
         )}
