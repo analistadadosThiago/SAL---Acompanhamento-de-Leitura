@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
@@ -38,7 +39,7 @@ const App: React.FC = () => {
 
   const getMenuTitle = () => {
     switch(activeMenu) {
-      case Menu.INICIO: return 'Strategic Intelligence';
+      case Menu.INICIO: return 'Dashboard Operacional';
       case Menu.CONSULTA_TECNICA: return 'Operational Query';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
       case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';

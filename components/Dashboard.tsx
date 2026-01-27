@@ -215,10 +215,10 @@ const Dashboard: React.FC = () => {
       {isReportGenerated && indicators && (
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <IndicatorCard label="Dataset Analisado" value={(indicators.leituras_totais || 0).toLocaleString()} icon={<FileText size={24}/>} color="blue" />
+            <IndicatorCard label="Leituras a Realizar" value={(indicators.leituras_totais || 0).toLocaleString()} icon={<FileText size={24}/>} color="blue" />
             <IndicatorCard label="Não Realizadas" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<XCircle size={24}/>} color="red" />
-            <IndicatorCard label="Sucesso Operacional" value={((indicators.leituras_totais || 0) - (indicators.leituras_nao_realizadas || 0)).toLocaleString()} icon={<CheckCircle size={24}/>} color="green" />
-            <IndicatorCard label="Taxa de Desvio" value={(( (indicators.leituras_nao_realizadas || 0) / (indicators.leituras_totais || 1)) * 100).toFixed(2).replace('.',',')} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
+            <IndicatorCard label="Leituras Realizadas" value={((indicators.leituras_totais || 0) - (indicators.leituras_nao_realizadas || 0)).toLocaleString()} icon={<CheckCircle size={24}/>} color="green" />
+            <IndicatorCard label="Indicador" value={(( (indicators.leituras_nao_realizadas || 0) / (indicators.leituras_totais || 1)) * 100).toFixed(2).replace('.',',')} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
           </div>
 
           <div className="bg-[#0f172a] p-12 rounded-[4rem] text-white shadow-2xl border border-white/5 relative overflow-hidden group">
@@ -226,10 +226,6 @@ const Dashboard: React.FC = () => {
             <div className="relative z-10">
               <div className="flex items-center gap-5 mb-10">
                 <div className="p-4 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-600/30"><Sparkles size={30} className="text-white" /></div>
-                <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tight italic">SAL Intelligence Core</h3>
-                  <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.4em] mt-1.5">Diagnóstico Preditivo v9.0</p>
-                </div>
               </div>
               
               {aiInsights ? (
@@ -251,7 +247,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between mb-12">
               <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight italic flex items-center gap-4">
                 <TrendingUp size={26} className="text-indigo-600" />
-                Performance de Impedimentos por Técnico
+                Performance por Leiturista
               </h3>
               <span className="text-[10px] font-black bg-slate-100 px-5 py-2.5 rounded-full uppercase text-slate-500 tracking-widest">Top Ocorrências do Período</span>
             </div>
