@@ -60,38 +60,33 @@ const App: React.FC = () => {
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#020617] text-white shadow-2xl transition-all duration-500 lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-full flex-col">
           {/* Header Branding - Sidebar */}
-          <div className="px-8 py-12 flex flex-col items-center text-center">
-            {/* Custom Created Logo illustrating 'Reading Analysis' */}
-            <div className="relative group cursor-pointer mb-6">
-              <div className="absolute -inset-6 bg-emerald-500/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-              
-              <div className="relative z-10 w-24 h-24 flex items-center justify-center">
-                {/* Logo Composition */}
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-indigo-600 rounded-3xl rotate-12 group-hover:rotate-6 transition-transform duration-500 shadow-2xl shadow-indigo-500/40"></div>
-                <div className="absolute inset-0 bg-slate-950 rounded-3xl transition-transform duration-500 group-hover:scale-95 flex items-center justify-center overflow-hidden border border-white/10">
+          <div className="px-8 py-10 flex flex-col items-start">
+            <div className="flex items-center gap-4 group cursor-pointer transition-all duration-300 hover:translate-x-1">
+              {/* Refined Smaller Logo */}
+              <div className="relative w-14 h-14 flex items-center justify-center shrink-0">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-indigo-600 rounded-2xl rotate-12 group-hover:rotate-6 transition-transform duration-500 shadow-xl shadow-indigo-500/20"></div>
+                <div className="absolute inset-0 bg-slate-950 rounded-2xl flex items-center justify-center border border-white/10">
                    <div className="relative">
-                      <BarChart3 size={40} className="text-emerald-400 opacity-80" />
-                      <div className="absolute -bottom-1 -right-1 bg-white p-1 rounded-lg text-indigo-600 shadow-lg scale-75 group-hover:scale-100 transition-transform">
-                        <Search size={16} strokeWidth={3} />
+                      <BarChart3 size={24} className="text-emerald-400 opacity-90" />
+                      <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-md text-indigo-600 shadow-lg scale-75">
+                        <Search size={10} strokeWidth={4} />
                       </div>
                    </div>
                 </div>
-                {/* Secondary Elements */}
-                <div className="absolute -top-2 -right-2 bg-emerald-500 text-white p-1.5 rounded-full shadow-lg border-2 border-[#020617] transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-1">
-                  <CheckCircle2 size={16} strokeWidth={3} />
-                </div>
-                <div className="absolute -bottom-3 -left-3 bg-indigo-500 text-white p-1.5 rounded-xl shadow-lg border-2 border-[#020617] opacity-0 group-hover:opacity-100 transition-all duration-500">
-                  <TrendingUp size={16} strokeWidth={3} />
-                </div>
+              </div>
+
+              {/* SAL Text to the Side */}
+              <div className="flex flex-col">
+                <h1 className="text-4xl font-black tracking-tighter text-white leading-none">
+                  SAL
+                </h1>
+                <div className="h-0.5 w-8 bg-emerald-500 mt-1 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
               </div>
             </div>
 
-            <div className="flex flex-col items-center">
-              <h1 className="text-5xl font-black tracking-tighter text-white leading-none">
-                SAL
-              </h1>
-              <div className="h-1 w-12 bg-emerald-500 my-4 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] max-w-[160px] leading-relaxed">
+            {/* Tagline below SAL */}
+            <div className="mt-4 pl-1">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] leading-tight block">
                 Sistema de Análise de Leitura
               </span>
             </div>
