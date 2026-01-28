@@ -17,7 +17,7 @@ export interface LeituraRecord {
   nosb_simulacao: string;
   cna: string;
   tipo: string;
-  foto?: string; // Added for evidence control
+  foto?: string;
 }
 
 export enum Menu {

@@ -1,20 +1,16 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { FilterState } from '../types';
 import IndicatorCard from './IndicatorCard';
-import { TABLE_NAME, IMPEDIMENTO_CODES } from '../constants';
+import { TABLE_NAME, IMPEDIMENTO_CODES, VIEW_ANOS, VIEW_MESES, VIEW_RAZOES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { 
   FileText, XCircle, CheckCircle, AlertTriangle, Filter, 
   Layout, RefreshCw, Zap, ChevronDown, Check, 
-  Database, TrendingUp, Sparkles, Activity, BrainCircuit 
+  Database, TrendingUp, Sparkles, Activity, BrainCircuit,
+  Globe, Cpu, BarChart3, Info, Terminal
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-
-const VIEW_ANOS = "v_anos";
-const VIEW_MESES = "v_meses";
-const VIEW_RAZOES = "v_razoes";
 
 const RPC_NAMES = {
   INDICADORES: 'rpc_indicadores_inicio',
@@ -53,7 +49,7 @@ const DropdownFilter: React.FC<{
 
   return (
     <div className="flex flex-col w-full relative" ref={dropdownRef}>
-      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-1">{label}</label>
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3 ml-1">{label}</label>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -99,7 +95,7 @@ const Dashboard: React.FC = () => {
   const [loadingAi, setLoadingAi] = useState(false);
   const [availableFilters, setAvailableFilters] = useState<FilterState>({ anos: [], meses: [], razoes: [] });
   const [selectedFilters, setSelectedFilters] = useState<{ano: string | null, mes: string | null, razoes: string[]}>({ 
-    ano: null, 
+    ano: '2024', 
     mes: null, 
     razoes: [] 
   });
@@ -140,7 +136,7 @@ const Dashboard: React.FC = () => {
       if (p_mes) query = query.eq('Mes', p_mes);
       if (p_rz) query = query.eq('rz', p_rz);
 
-      const { data: impData } = await query.limit(5000);
+      const { data: impData } = await query.limit(10000);
       const counts: Record<string, number> = {};
       (impData || []).forEach(i => { const k = safeGet(i.matr); counts[k] = (counts[k] || 0) + 1; });
       
@@ -161,32 +157,39 @@ const Dashboard: React.FC = () => {
     if (!indicators || loadingAi) return;
     setLoadingAi(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const eff = (((indicators.leituras_totais - indicators.leituras_nao_realizadas) / (indicators.leituras_totais || 1)) * 100).toFixed(2);
       
-      const prompt = `
-        Aja como um consultor sênior de utilities para o Sistema SAL (Sistema de Análise de Leitura). 
-        Analise os seguintes indicadores operacionais:
-        - Total de Leituras: ${indicators.leituras_totais}
-        - Leituras Não Realizadas (Impedimentos): ${indicators.leituras_nao_realizadas}
-        - Eficiência de Campo: ${eff}%
-        - Top Matrículas com mais impedimentos (Volume): ${JSON.stringify(graphData)}
-
-        Sua análise deve obrigatoriamente conter:
-        1. Identificação das Matrículas com maior indicador (risco operacional).
-        2. Discussão sobre quais os impedimentos mais comuns que podem estar afetando o faturamento.
-        3. Orientações executivas de como proceder para melhorias imediatas e controle de perdas.
-        
-        Mantenha um tom profissional, direto e focado em resultados de faturamento. Seja específico e use os dados fornecidos.
-      `;
-
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: prompt
+        contents: [{
+          role: 'user',
+          parts: [{
+            text: `
+              Aja como um consultor sênior de utilities para o Sistema SAL (Sistema de Análise de Leitura). 
+              Analise os seguintes indicadores operacionais do período selecionado:
+              - Volume Total de Leituras: ${indicators.leituras_totais}
+              - Leituras Não Realizadas (Impedimentos): ${indicators.leituras_nao_realizadas}
+              - Eficiência Operacional: ${eff}%
+              - Principais técnicos (Matrículas) com anomalias: ${JSON.stringify(graphData)}
+
+              Sua consultoria estratégica deve abordar:
+              1. Análise detalhada dos riscos operacionais e de faturamento.
+              2. Avaliação da performance do time de campo baseada nas matrículas críticas.
+              3. Plano de ação imediato para redução de perdas.
+              
+              Mantenha uma linguagem executiva, profissional e orientada a dados. Use parágrafos curtos. Responda em Português do Brasil.
+            `
+          }]
+        }],
+        config: {
+          thinkingConfig: { thinkingBudget: 4000 }
+        }
       });
-      setAiInsights(response.text || "Análise finalizada sem texto de retorno.");
+      setAiInsights(response.text || "Análise indisponível no momento.");
     } catch (err) {
-      setAiInsights("Sistema de IA indisponível no momento.");
+      console.error("AI Error:", err);
+      setAiInsights("Falha ao processar análise neural. Verifique a conexão com o núcleo de inteligência.");
     } finally {
       setLoadingAi(false);
     }
@@ -194,12 +197,28 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-10 pb-20 animate-in fade-in duration-700">
-      <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-4">
+        <div>
+           <div className="flex items-center gap-3 text-indigo-600 mb-2">
+              <Globe size={16} />
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Network Intelligence Active</span>
+           </div>
+           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">SAL Dashboard</h1>
+           <p className="text-slate-400 font-medium mt-1">Sincronização estratégica de performance operacional</p>
+        </div>
+        <div className="px-6 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-3 shadow-sm group hover:border-indigo-200 transition-colors">
+           <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+           <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Core v9.0 Sincronizado</span>
+        </div>
+      </div>
+
+      <section className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-200 relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/5">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-600 via-indigo-400 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
         <div className="flex items-center gap-4 mb-10">
-          <div className="p-4 bg-indigo-600 text-white rounded-[1.5rem] shadow-xl shadow-indigo-500/20"><Filter size={22}/></div>
+          <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-600/20"><Filter size={22}/></div>
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight italic uppercase leading-none">Configuração de Parâmetros</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Sincronização Estratégica v9.0</p>
+            <h2 className="text-xl font-black text-slate-900 uppercase italic leading-none">Configuração de Dataset</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Parâmetros de Sincronização em Tempo Real</p>
           </div>
         </div>
         
@@ -216,13 +235,13 @@ const Dashboard: React.FC = () => {
           <button 
             onClick={handleGenerate} 
             disabled={loading}
-            className="group relative px-20 py-5 bg-slate-950 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-30 overflow-hidden"
+            className="group relative px-24 py-5 bg-slate-950 text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-30 overflow-hidden"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/0 via-white/10 to-indigo-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-            <div className="relative flex items-center gap-4">
-              {loading ? <Activity className="animate-spin" size={20}/> : <Zap size={20} fill="currentColor"/>}
-              SINCRONIZAR DASHBOARD
+            <div className="relative z-10 flex items-center gap-4">
+              {loading ? <Activity className="animate-spin" size={20}/> : <Zap size={20} fill="currentColor" className="group-hover:text-amber-400 transition-colors"/>}
+              ATUALIZAR MATRIZ
             </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           </button>
         </div>
       </section>
@@ -230,84 +249,141 @@ const Dashboard: React.FC = () => {
       {isReportGenerated && indicators && (
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <IndicatorCard label="Leituras a Realizar" value={(indicators.leituras_totais || 0).toLocaleString()} icon={<FileText size={24}/>} color="blue" />
-            <IndicatorCard label="Não Realizadas" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<XCircle size={24}/>} color="red" />
+            <IndicatorCard label="Leituras Totais" value={(indicators.leituras_totais || 0).toLocaleString()} icon={<FileText size={24}/>} color="blue" />
+            <IndicatorCard label="Impedimentos" value={(indicators.leituras_nao_realizadas || 0).toLocaleString()} icon={<XCircle size={24}/>} color="red" />
             <IndicatorCard label="Leituras Realizadas" value={((indicators.leituras_totais || 0) - (indicators.leituras_nao_realizadas || 0)).toLocaleString()} icon={<CheckCircle size={24}/>} color="green" />
-            <IndicatorCard label="Indicador" value={(( (indicators.leituras_nao_realizadas || 0) / (indicators.leituras_totais || 1)) * 100).toFixed(2).replace('.',',')} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
+            <IndicatorCard label="Taxa de Ocorrência" value={(( (indicators.leituras_nao_realizadas || 0) / (indicators.leituras_totais || 1)) * 100).toFixed(2)} suffix="%" icon={<AlertTriangle size={24}/>} color="amber" />
           </div>
 
-          <div className="bg-[#0f172a] p-12 rounded-[4rem] text-white shadow-2xl border border-white/5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-20 opacity-5 pointer-events-none rotate-12 transition-transform group-hover:scale-110"><BrainCircuit size={200} /></div>
+          <div className="bg-[#020617] p-12 rounded-[4rem] text-white shadow-2xl border border-white/5 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-24 opacity-[0.03] pointer-events-none rotate-12 group-hover:rotate-0 transition-transform duration-1000"><BrainCircuit size={280} /></div>
+            <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+            
             <div className="relative z-10">
-              <div className="flex items-center gap-5 mb-10">
-                <div className="p-4 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-600/30"><Sparkles size={30} className="text-white" /></div>
-                <div>
-                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Consultoria Estratégica SAL AI</h3>
-                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Powered by Gemini 3 Pro</span>
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+                <div className="flex items-center gap-5">
+                  <div className="p-5 bg-indigo-600 rounded-[2rem] shadow-2xl shadow-indigo-600/20 relative">
+                    <Sparkles size={32} className="text-white" />
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-[#020617] animate-pulse"></div>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter">SAL Neural Insights</h3>
+                    <div className="flex items-center gap-3 mt-1.5">
+                       <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest px-2 py-0.5 border border-indigo-400/30 rounded-full">Gemini 3 Pro Engine</span>
+                       <div className="h-1 w-1 rounded-full bg-slate-700"></div>
+                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Consultoria Estratégica AI</span>
+                    </div>
+                  </div>
                 </div>
+                {aiInsights && (
+                  <button onClick={handleAiConsultancy} disabled={loadingAi} className="flex items-center gap-3 px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10 text-[10px] font-black uppercase tracking-widest active:scale-95">
+                    <RefreshCw className={loadingAi ? 'animate-spin' : ''} size={16} />
+                    Recalcular Insight
+                  </button>
+                )}
               </div>
               
               {aiInsights ? (
-                <div className="p-10 bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 text-slate-300 text-lg leading-relaxed animate-in fade-in duration-700">
-                  <p className="whitespace-pre-wrap">{aiInsights}</p>
+                <div className="p-10 bg-white/[0.03] backdrop-blur-3xl rounded-[3rem] border border-white/10 text-slate-300 text-lg leading-relaxed animate-in fade-in zoom-in-95 duration-700 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full"></div>
+                  <div className="flex items-center gap-4 mb-8 pb-6 border-b border-white/5">
+                    <div className="p-2 bg-indigo-500/20 rounded-xl"><Cpu size={18} className="text-indigo-400" /></div>
+                    <div>
+                       <span className="text-[11px] font-black uppercase tracking-[0.3em] text-indigo-400">Relatório Estratégico Neural materializado</span>
+                       <p className="text-[9px] text-slate-500 uppercase mt-0.5">Base de dados: Sincronização Atual</p>
+                    </div>
+                  </div>
+                  <div className="prose prose-invert max-w-none">
+                    <p className="whitespace-pre-wrap font-medium text-slate-200">{aiInsights}</p>
+                  </div>
+                  <div className="mt-10 flex items-center gap-4 text-slate-500 text-[10px] font-bold uppercase italic border-t border-white/5 pt-6">
+                     <Info size={14} />
+                     Os dados acima são baseados em processamento probabilístico e devem ser validados pela gerência operacional.
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-8">
-                  <p className="text-slate-400 text-base max-w-2xl font-medium">Esta Inteligência Artificial de última geração analisa seu dataset em tempo real para detectar padrões de risco e oportunidades de recuperação de faturamento.</p>
-                  <button onClick={handleAiConsultancy} disabled={loadingAi} className="w-fit px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-500 shadow-2xl shadow-indigo-600/40 transition-all flex items-center gap-4">
-                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>SOLICITAR ANÁLISE IA <Zap size={16} fill="currentColor"/></>}
+                <div className="flex flex-col md:flex-row items-center gap-12 p-12 border-2 border-dashed border-white/10 rounded-[4rem] bg-white/[0.02]">
+                  <div className="flex-1 space-y-4 text-center md:text-left">
+                    <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
+                       <Terminal size={18} className="text-indigo-400" />
+                       <h4 className="text-xl font-bold text-white uppercase tracking-tight">Análise Preditiva de Riscos</h4>
+                    </div>
+                    <p className="text-slate-400 text-base font-medium leading-relaxed">
+                      Sincronize o núcleo de inteligência para identificar anomalias de faturamento, gargalos de performance técnica em campo e estimativas de perdas operacionais para o período selecionado.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={handleAiConsultancy} 
+                    disabled={loadingAi} 
+                    className="w-full md:w-fit px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-500 transition-all flex items-center justify-center gap-4 shadow-2xl shadow-indigo-600/30 group active:scale-95"
+                  >
+                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>PROCESSAR INSIGHTS <Zap size={16} fill="currentColor" className="group-hover:scale-125 transition-transform"/></>}
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          <section className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between mb-12">
-              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight italic flex items-center gap-4">
-                <TrendingUp size={26} className="text-indigo-600" />
-                Análise de Ocorrências por Técnico
-              </h3>
-              <span className="text-[10px] font-black bg-slate-100 px-5 py-2.5 rounded-full uppercase text-slate-500 tracking-widest">Top 15 Performance Crítica</span>
-            </div>
-            <div className="h-[450px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graphData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="matricula" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                  <Tooltip cursor={{fill: '#f8fafc', radius: 12}} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.1)', padding: '20px' }} />
-                  <Bar dataKey="qtd" name="Ocorrências" barSize={50} radius={[15, 15, 0, 0]}>
-                    {graphData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#f43f5e' : '#4f46e5'} fillOpacity={1 - (index * 0.04)} />
-                    ))}
-                    <LabelList dataKey="qtd" position="top" style={{ fill: '#1e293b', fontSize: '12px', fontWeight: '900' }} offset={12} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <section className="bg-white p-12 rounded-[4rem] shadow-sm border border-slate-200 group transition-all duration-500 hover:shadow-xl">
+             <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+                <div className="flex items-center gap-5">
+                   <div className="p-4 bg-slate-50 text-indigo-600 rounded-2xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform"><TrendingUp size={28} /></div>
+                   <div>
+                     <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Ranking de Performance Crítica</h3>
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Distribuição de Impedimentos por Matrícula Técnica</p>
+                   </div>
+                </div>
+                <div className="px-5 py-2.5 bg-slate-100 rounded-full flex items-center gap-3">
+                   <BarChart3 size={14} className="text-slate-400" />
+                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Top 15 Ocorrências</span>
+                </div>
+             </div>
+             <div className="h-[450px] w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={graphData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                   <CartesianGrid strokeDasharray="8 8" vertical={false} stroke="#f1f5f9" />
+                   <XAxis dataKey="matricula" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
+                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                   <Tooltip 
+                     cursor={{fill: '#f8fafc', radius: 16}} 
+                     contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '20px' }}
+                   />
+                   <Bar dataKey="qtd" name="Total de Ocorrências" barSize={54} radius={[16, 16, 4, 4]}>
+                     {graphData.map((_, index) => (
+                       <Cell key={`cell-${index}`} fill={index === 0 ? '#f43f5e' : '#4f46e5'} fillOpacity={1 - (index * 0.03)} />
+                     ))}
+                     <LabelList dataKey="qtd" position="top" style={{ fill: '#1e293b', fontSize: '12px', fontWeight: '900' }} offset={15} />
+                   </Bar>
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
           </section>
         </div>
       )}
 
       {!isReportGenerated && !loading && (
-        <div className="flex flex-col items-center justify-center py-40 bg-white border-2 border-dashed border-slate-200 rounded-[4rem] text-center animate-pulse">
-          <div className="p-12 bg-slate-50 rounded-full mb-8 text-slate-200"><Layout size={100} /></div>
-          <h3 className="text-slate-900 font-black text-3xl mb-4 tracking-tighter uppercase italic">Dados Operacionais Pendentes</h3>
-          <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[0.5em] px-20 max-w-lg">Configure os parâmetros fiscais e de competência para carregar o dashboard estratégico SAL v9.0.</p>
+        <div className="flex flex-col items-center justify-center py-40 bg-white border-2 border-dashed border-slate-200 rounded-[5rem] text-center animate-in fade-in duration-1000 transition-colors hover:border-indigo-100">
+          <div className="relative mb-10">
+             <div className="absolute inset-0 bg-indigo-50 rounded-full scale-150 blur-3xl opacity-50"></div>
+             <div className="relative p-16 bg-white rounded-full shadow-xl border border-slate-50 text-slate-200">
+                <Layout size={120} className="text-slate-100" />
+             </div>
+          </div>
+          <h3 className="text-slate-900 font-black text-3xl mb-4 tracking-tighter uppercase italic">Aguardando Parâmetros de Core</h3>
+          <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[0.5em] max-w-sm mx-auto">Configure os filtros operacionais acima para materializar o dashboard de monitoramento.</p>
         </div>
       )}
 
       {loading && (
-        <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-center animate-in fade-in duration-500">
-           <div className="bg-white p-24 rounded-[5rem] shadow-2xl flex flex-col items-center gap-10 border border-slate-100">
+        <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-center animate-in fade-in duration-300">
+           <div className="bg-white p-24 rounded-[5rem] shadow-2xl shadow-indigo-500/20 flex flex-col items-center gap-12 border border-slate-100 animate-in zoom-in-95 duration-500">
               <div className="relative h-32 w-32">
                  <div className="absolute inset-0 rounded-full border-[10px] border-slate-50 border-t-indigo-600 animate-spin"></div>
-                 <Database size={44} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
+                 <Database size={48} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Sincronização de Matriz Neural</h2>
-                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-4 animate-pulse">Processando Dataset SAL Enterprise...</p>
+                 <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Sincronizando Core v9.0</h2>
+                 <p className="text-[11px] font-bold text-indigo-600 uppercase tracking-[0.4em] mt-4 animate-pulse">Acessando Camada de Dados Segura...</p>
               </div>
            </div>
         </div>

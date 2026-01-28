@@ -46,8 +46,12 @@ export const RPC_CE_TIPO_V9 = "rpc_controle_evidencias_tipo_v9";
 
 // RPCs DE VALIDAÇÃO DE FILTROS
 export const RPC_GET_ANOS = "get_anos_disponiveis";
-export const RPC_GET_ANOS_SIMPLES = "get_anos_simples";
 export const RPC_GET_MESES = "get_meses_disponiveis";
 export const RPC_GET_MATRICULAS = "get_matriculas_disponiveis";
-export const RPC_GET_MATRICULAS_SIMPLES = "get_matriculas_simples";
-export const RPC_GET_ULS = "get_ul_disponiveis";
+export const RPC_GET_RAZOES = "get_razoes_disponiveis";
+export const RPC_GET_MOTIVOS_NOSB = "rpc_nosb_buscar_motivos";
+
+// VIEWS AUXILIARES
+export const VIEW_ANOS = "v_anos";
+export const VIEW_MESES = "v_meses";
+export const VIEW_RAZOES = "v_razoes";

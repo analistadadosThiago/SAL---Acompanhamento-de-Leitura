@@ -12,7 +12,7 @@ import {
   Activity, Check, ChevronDown, 
   Zap, Camera, Loader2, AlertCircle, RefreshCw,
   Maximize2, Minimize2, FileText, TrendingUp, BarChart3,
-  FileDown, Trash2, ClipboardList, Printer, Tag
+  FileDown, Trash2, ClipboardList, Printer, Tag, Database
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -256,16 +256,13 @@ const EvidenceAuditControl: React.FC = () => {
     }));
 
     if (activeChartTab === 'matr') {
-      // Ordenação por indicador crescente (menor para maior)
       return result.sort((a, b) => a.ind - b.ind).slice(0, 20);
     }
 
     if (activeChartTab === 'razao') {
-      // Ordenação Alfabética A-Z
       return result.sort((a, b) => a.label.localeCompare(b.label)).slice(0, 20);
     }
     
-    // Ordenação Cronológica para Meses
     return result.sort((a, b) => (MONTH_ORDER[a.label] || 0) - (MONTH_ORDER[b.label] || 0)).slice(0, 20);
   }, [data, activeChartTab]);
 
@@ -298,7 +295,7 @@ const EvidenceAuditControl: React.FC = () => {
   };
 
   return (
-    <div className={`space-y-10 pb-20 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#f8fafc] overflow-y-auto p-10' : 'relative'}`}>
+    <div className={`space-y-10 pb-20 transition-all duration-500 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#f8fafc] overflow-y-auto p-10' : 'relative'}`}>
       
       {/* SEÇÃO DE FILTROS APLICADOS */}
       <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -306,50 +303,50 @@ const EvidenceAuditControl: React.FC = () => {
           <Tag size={12} className="text-indigo-400" />
           Filtros Aplicados:
         </div>
-        {filterAno && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Ano: {filterAno}</span>}
-        {filterMeses.length > 0 && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Meses: {filterMeses.join(', ')}</span>}
-        {filterMatr && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">Matricula: {filterMatr}</span>}
-        {filterUlDe && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase">UL: {filterUlDe} a {filterUlPara || 'Fim'}</span>}
+        {filterAno && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase shadow-sm">Ano: {filterAno}</span>}
+        {filterMeses.length > 0 && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase shadow-sm">Meses: {filterMeses.join(', ')}</span>}
+        {filterMatr && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase shadow-sm">Matricula: {filterMatr}</span>}
+        {filterUlDe && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-600 uppercase shadow-sm">UL: {filterUlDe} a {filterUlPara || 'Fim'}</span>}
         {!filterAno && !filterMeses.length && <span className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-400 uppercase italic">Nenhum parâmetro selecionado</span>}
       </div>
 
       {(connectionError || validationError) && (
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-800 text-[11px] font-bold uppercase">
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-800 text-[11px] font-bold uppercase shadow-sm animate-in shake duration-500">
           <AlertCircle size={18} /> {connectionError || validationError}
         </div>
       )}
 
-      <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-200">
+      <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-200 group transition-all duration-500 hover:shadow-xl">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-500/20"><ClipboardList size={20} /></div>
+            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-500/20 group-hover:rotate-6 transition-transform"><ClipboardList size={20} /></div>
             <div>
               <h2 className="text-xl font-black text-slate-900 uppercase italic">Controle de Evidências</h2>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronização de Campo v9.0</p>
             </div>
           </div>
-          <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-3 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all">
+          <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-3 bg-slate-50 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all hover:bg-white border border-transparent hover:border-slate-100 shadow-sm">
             {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">ANO</label>
-            <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Database size={10}/> ANO</label>
+            <select value={filterAno} onChange={e => setFilterAno(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all hover:border-indigo-100">
               <option value="">Selecione</option>
               {options.anos.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
             </select>
           </div>
           
           <div className="space-y-2 relative" ref={dropdownRef}>
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">MESES</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Tag size={10}/> MESES</label>
             <button onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold flex items-center justify-between hover:border-indigo-600 transition-all">
               <span className="truncate">{filterMeses.length === 0 ? "Selecionar" : `${filterMeses.length} mês(es)`}</span>
-              <ChevronDown size={18} />
+              <ChevronDown size={18} className={`transition-transform duration-300 ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {isMonthDropdownOpen && (
-              <div className="absolute z-[60] top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2 custom-scrollbar">
+              <div className="absolute z-[60] top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2 custom-scrollbar animate-in slide-in-from-top-2">
                 {options.meses.map(o => (
                   <div key={o.valor} onClick={() => setFilterMeses(p => p.includes(o.valor) ? p.filter(v => v !== o.valor) : [...p, o.valor])} className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all ${filterMeses.includes(o.valor) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
                     <span className="text-xs uppercase font-bold">{o.label}</span>
@@ -361,8 +358,8 @@ const EvidenceAuditControl: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Matricula</label>
-            <select value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Activity size={10}/> Matricula</label>
+            <select value={filterMatr} onChange={e => setFilterMatr(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold focus:border-indigo-600 outline-none transition-all hover:border-indigo-100">
               <option value="">Todas</option>
               {options.matriculas.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
             </select>
@@ -380,12 +377,15 @@ const EvidenceAuditControl: React.FC = () => {
         </div>
 
         <div className="mt-10 flex flex-col md:flex-row justify-center items-center gap-6">
-          <button onClick={handleGenerate} disabled={loading} className="px-16 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-xl disabled:opacity-30 min-w-[280px]">
-            {loading ? <RefreshCw className="animate-spin" /> : <Zap size={20} fill="currentColor" />}
-            Gerar Relatório
+          <button onClick={handleGenerate} disabled={loading} className="group relative px-20 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-900/10 disabled:opacity-30 min-w-[300px] overflow-hidden">
+            <div className="relative z-10 flex items-center gap-4">
+              {loading ? <RefreshCw className="animate-spin" /> : <Zap size={20} fill="currentColor" className="group-hover:text-amber-400 transition-colors" />}
+              Gerar Relatório Estratégico
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           </button>
           <button onClick={handleNovaConsulta} className="px-10 py-5 bg-slate-100 text-slate-500 rounded-[2rem] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200">
-            <Trash2 size={16} /> Nova Consulta
+            <Trash2 size={16} /> Limpar Parâmetros
           </button>
         </div>
       </section>
@@ -399,7 +399,7 @@ const EvidenceAuditControl: React.FC = () => {
             <IndicatorCard label="Indicador Geral" value={summaryMetrics.ind.toFixed(2).replace('.',',')} suffix="%" icon={<TrendingUp size={20}/>} color="amber" />
           </div>
 
-          <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden">
+          <section className="bg-white rounded-[3rem] shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-8 duration-700">
             <div className="px-10 py-8 border-b flex flex-wrap items-center justify-between gap-6 bg-slate-50/30">
                <div className="flex flex-wrap items-center gap-6">
                   <div className="p-3 bg-white rounded-2xl shadow-sm border"><Camera size={24} className="text-indigo-600" /></div>
@@ -410,23 +410,23 @@ const EvidenceAuditControl: React.FC = () => {
                    </div>
                 </div>
                 <div className="flex items-center gap-3">
-                   <button onClick={handleExportPDF} className="flex items-center gap-2 px-6 py-3 bg-rose-50 text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100">
+                   <button onClick={handleExportPDF} className="flex items-center gap-2 px-6 py-3 bg-rose-50 text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100 active:scale-95">
                      <Printer size={16} /> PDF
                    </button>
                    <button onClick={() => {
                      const ws = XLSX.utils.json_to_sheet(currentSourceData);
                      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SAL_Evidencias");
                      XLSX.writeFile(wb, "SAL_Relatorio_Evidencias.xlsx");
-                   }} className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100">
+                   }} className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100 active:scale-95">
                      <FileDown size={16} /> EXCEL
                    </button>
                 </div>
              </div>
-             <div className="overflow-x-auto p-10">
+             <div className="overflow-x-auto p-10 custom-scrollbar">
                 <table className="w-full text-[11px] border-collapse">
                    <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
                       <tr>
-                         <th className="px-6 py-5 border-x border-slate-100">RAZÃO</th>
+                         <th className="px-6 py-5 border-x border-slate-100">RAZÃO SOCIAL</th>
                          {activeTableTab !== 'razao' && <th className="px-6 py-5 border-x border-slate-100">MATRICULA</th>}
                          <th className="px-6 py-5 border-x border-slate-100 text-center">SOLICITADAS</th>
                          <th className="px-6 py-5 border-x border-slate-100 text-center">REALIZADAS</th>
@@ -437,7 +437,7 @@ const EvidenceAuditControl: React.FC = () => {
                    <tbody>
                       {paginatedData.map((row, idx) => (
                          <tr key={idx} className={`${row.indicador >= 90 ? 'bg-[#166534] text-white' : row.indicador >= 70 ? 'bg-[#854d0e] text-white' : 'bg-[#991b1b] text-white'} border-b border-white/10 hover:brightness-110 transition-all`}>
-                            <td className="px-6 py-4 border-x border-white/5 font-black uppercase truncate max-w-[200px]">{row.rz}</td>
+                            <td className="px-6 py-4 border-x border-white/5 font-black uppercase truncate max-w-[250px]">{row.rz}</td>
                             {activeTableTab !== 'razao' && <td className="px-6 py-4 border-x border-white/5 font-bold">{row.matr}</td>}
                             <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.solicitadas.toLocaleString()}</td>
                             <td className="px-6 py-4 text-center border-x border-white/5 font-bold">{row.realizadas.toLocaleString()}</td>
@@ -451,31 +451,31 @@ const EvidenceAuditControl: React.FC = () => {
              <div className="px-10 py-6 border-t flex items-center justify-between bg-slate-50/50">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página {currentPage} de {totalPages}</p>
                 <div className="flex gap-4">
-                   <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-600 transition-all disabled:opacity-30"><ChevronLeft size={18}/></button>
-                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-600 transition-all disabled:opacity-30"><ChevronRight size={18}/></button>
+                   <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-600 transition-all disabled:opacity-30 active:scale-95"><ChevronLeft size={18}/></button>
+                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-600 transition-all disabled:opacity-30 active:scale-95"><ChevronRight size={18}/></button>
                 </div>
              </div>
           </section>
 
-          <section className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-200">
+          <section className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-200 group transition-all duration-500 hover:shadow-xl">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6">
               <div className="flex items-center gap-4">
-                <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm"><BarChart3 size={24} /></div>
+                <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm group-hover:scale-110 transition-transform"><BarChart3 size={24} /></div>
                 <div>
                   <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight italic leading-none">
                     Visualização Grafica dos Resultados
                   </h3>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Módulo de Performance</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Módulo de Performance Técnica</p>
                 </div>
               </div>
-              <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
-                 <button onClick={() => setActiveChartTab('mes')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'mes' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
-                 <button onClick={() => setActiveChartTab('razao')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'razao' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Razão</button>
-                 <button onClick={() => setActiveChartTab('matr')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Matricula</button>
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200">
+                 <button onClick={() => setActiveChartTab('mes')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'mes' ? 'bg-white text-indigo-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
+                 <button onClick={() => setActiveChartTab('razao')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'razao' ? 'bg-white text-indigo-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}>Razão</button>
+                 <button onClick={() => setActiveChartTab('matr')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeChartTab === 'matr' ? 'bg-white text-indigo-600 shadow-md translate-y-[-1px]' : 'text-slate-400 hover:text-slate-600'}`}>Matricula</button>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-8 mb-10 px-8 py-5 bg-slate-50/70 rounded-[2rem] border border-slate-200">
+            <div className="flex flex-wrap items-center gap-8 mb-10 px-8 py-5 bg-slate-50/70 rounded-[2rem] border border-slate-200 shadow-inner">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Legenda de Performance:</span>
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded-md bg-[#166534] shadow-sm"></div>
@@ -487,7 +487,7 @@ const EvidenceAuditControl: React.FC = () => {
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded-md bg-[#991b1b] shadow-sm"></div>
-                <span className="text-[10px] font-black text-slate-700 uppercase">Ruim (&lt; 70%)</span>
+                <span className="text-[10px] font-black text-slate-700 uppercase">Crítico (&lt; 70%)</span>
               </div>
             </div>
 
@@ -498,7 +498,7 @@ const EvidenceAuditControl: React.FC = () => {
                   <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: '900'}} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
                   <Tooltip content={<CustomChartTooltip />} cursor={{fill: '#f8fafc', radius: 12}} />
-                  <Legend iconType="circle" />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }} />
                   <Bar dataKey="nre" name="Não Realizadas" barSize={40} radius={[8, 8, 0, 0]}>
                     {chartData.map((entry, index) => {
                       let color = '#991b1b';
@@ -523,14 +523,17 @@ const EvidenceAuditControl: React.FC = () => {
 
       {loading && (
         <div className="fixed inset-0 z-[5000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300">
-          <div className="bg-white p-16 rounded-[4rem] shadow-2xl flex flex-col items-center gap-8 border border-slate-100">
+          <div className="bg-white p-16 rounded-[4rem] shadow-2xl flex flex-col items-center gap-8 border border-slate-100 animate-in zoom-in-95 duration-500">
              <div className="relative h-24 w-24">
                 <div className="absolute inset-0 rounded-full border-[8px] border-slate-50 border-t-indigo-600 animate-spin"></div>
                 <Loader2 size={32} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
              </div>
              <div className="text-center">
-               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Análise de Evidências</h2>
+               <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Análise de Evidências v9.0</h2>
                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-3 animate-pulse">Sincronizando Dataset ({fetchProgress.toLocaleString()} registros)...</p>
+               <div className="mt-6 w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-600 transition-all duration-300" style={{ width: `${Math.min(100, (fetchProgress / 5000) * 100)}%` }}></div>
+               </div>
              </div>
           </div>
         </div>
