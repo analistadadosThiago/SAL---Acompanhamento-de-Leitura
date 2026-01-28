@@ -5,13 +5,14 @@ import {
   BarChart3, Users, Bell, Globe, Camera,
   UserCircle, ChevronDown, ChevronUp, ChevronRight,
   ShieldAlert, Settings, HelpCircle, Activity, 
-  CheckCircle2, ClipboardCheck, TrendingUp
+  CheckCircle2, ClipboardCheck, TrendingUp, Printer
 } from 'lucide-react';
 import { Menu } from './types';
 import Dashboard from './components/Dashboard';
 import TechnicalSearch from './components/TechnicalSearch';
 import LeituristaControl from './components/LeituristaControl';
 import EvidenceAuditControl from './components/EvidenceAuditControl';
+import NosbPrintControl from './components/NosbPrintControl';
 
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
@@ -37,6 +38,7 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return <TechnicalSearch />;
       case Menu.CONTROLE_LEITURISTA: return <LeituristaControl />;
       case Menu.CONTROLE_EVIDENCIAS: return <EvidenceAuditControl />;
+      case Menu.NOSB_IMPRESSAO: return <NosbPrintControl />;
       default: return <Dashboard />;
     }
   };
@@ -47,6 +49,7 @@ const App: React.FC = () => {
       case Menu.CONSULTA_TECNICA: return 'Pesquisa de Dados';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
       case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
+      case Menu.NOSB_IMPRESSAO: return 'Nosb.Impressão';
       default: return 'SAL Enterprise';
     }
   };
@@ -148,6 +151,17 @@ const App: React.FC = () => {
                 >
                   <Camera size={16} />
                   Evidências
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveMenu(Menu.NOSB_IMPRESSAO);
+                    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ml-2 border-l-2 border-transparent hover:border-blue-500/50 ${activeMenu === Menu.NOSB_IMPRESSAO ? 'bg-white/10 text-blue-400 border-l-blue-500' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Printer size={16} />
+                  Nosb.Impressão
                 </button>
               </div>
             </div>

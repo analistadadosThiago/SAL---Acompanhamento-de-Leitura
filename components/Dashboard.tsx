@@ -177,7 +177,7 @@ const Dashboard: React.FC = () => {
         2. Discussão sobre quais os impedimentos mais comuns que podem estar afetando o faturamento.
         3. Orientações executivas de como proceder para melhorias imediatas e controle de perdas.
         
-        Mantenha um tom profissional, direto e focado em resultados de faturamento.
+        Mantenha um tom profissional, direto e focado em resultados de faturamento. Seja específico e use os dados fornecidos.
       `;
 
       const response = await ai.models.generateContent({
@@ -242,8 +242,8 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center gap-5 mb-10">
                 <div className="p-4 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-600/30"><Sparkles size={30} className="text-white" /></div>
                 <div>
-                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Consultoria Estratégica SAL</h3>
-                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Análise de Redes Neurais v9.0</span>
+                   <h3 className="text-xl font-black uppercase italic tracking-tighter">Consultoria Estratégica SAL AI</h3>
+                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Powered by Gemini 3 Pro</span>
                 </div>
               </div>
               
@@ -253,9 +253,9 @@ const Dashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-8">
-                  <p className="text-slate-400 text-base max-w-2xl font-medium">Esta Inteligência faz parte do Sistema SAL e pretende fazer uma análise profunda dos resultados obtidos dentro do período acima selecionados.</p>
+                  <p className="text-slate-400 text-base max-w-2xl font-medium">Esta Inteligência Artificial de última geração analisa seu dataset em tempo real para detectar padrões de risco e oportunidades de recuperação de faturamento.</p>
                   <button onClick={handleAiConsultancy} disabled={loadingAi} className="w-fit px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-500 shadow-2xl shadow-indigo-600/40 transition-all flex items-center gap-4">
-                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>INICIAR CONSULTORIA <Zap size={16} fill="currentColor"/></>}
+                    {loadingAi ? <RefreshCw className="animate-spin" size={18}/> : <>SOLICITAR ANÁLISE IA <Zap size={16} fill="currentColor"/></>}
                   </button>
                 </div>
               )}
@@ -266,9 +266,9 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between mb-12">
               <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight italic flex items-center gap-4">
                 <TrendingUp size={26} className="text-indigo-600" />
-                Performance por Leiturista
+                Análise de Ocorrências por Técnico
               </h3>
-              <span className="text-[10px] font-black bg-slate-100 px-5 py-2.5 rounded-full uppercase text-slate-500 tracking-widest">Top Ocorrências do Período</span>
+              <span className="text-[10px] font-black bg-slate-100 px-5 py-2.5 rounded-full uppercase text-slate-500 tracking-widest">Top 15 Performance Crítica</span>
             </div>
             <div className="h-[450px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -293,8 +293,8 @@ const Dashboard: React.FC = () => {
       {!isReportGenerated && !loading && (
         <div className="flex flex-col items-center justify-center py-40 bg-white border-2 border-dashed border-slate-200 rounded-[4rem] text-center animate-pulse">
           <div className="p-12 bg-slate-50 rounded-full mb-8 text-slate-200"><Layout size={100} /></div>
-          <h3 className="text-slate-900 font-black text-3xl mb-4 tracking-tighter uppercase italic">Fluxo de Dados Pendente</h3>
-          <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[0.5em] px-20 max-w-lg">O núcleo de processamento aguarda a seleção de parâmetros operacionais para materializar a visão estratégica.</p>
+          <h3 className="text-slate-900 font-black text-3xl mb-4 tracking-tighter uppercase italic">Dados Operacionais Pendentes</h3>
+          <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[0.5em] px-20 max-w-lg">Configure os parâmetros fiscais e de competência para carregar o dashboard estratégico SAL v9.0.</p>
         </div>
       )}
 
@@ -306,8 +306,8 @@ const Dashboard: React.FC = () => {
                  <Database size={44} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Análise de Matriz Neural</h2>
-                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-4 animate-pulse">Materializando Dataset SAL v9.0...</p>
+                <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Sincronização de Matriz Neural</h2>
+                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.5em] mt-4 animate-pulse">Processando Dataset SAL Enterprise...</p>
               </div>
            </div>
         </div>
