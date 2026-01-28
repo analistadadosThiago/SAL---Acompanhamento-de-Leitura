@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, Search, Menu as MenuIcon, X, ShieldCheck, 
-  BarChart3, Users, LogOut, Bell, Globe, Camera,
-  UserCircle, Settings, HelpCircle, Activity, 
+  BarChart3, Users, Bell, Globe, Camera,
+  UserCircle, ChevronDown, ChevronUp, ChevronRight,
+  ShieldAlert, Settings, HelpCircle, Activity, 
   CheckCircle2, ClipboardCheck, TrendingUp
 } from 'lucide-react';
 import { Menu } from './types';
@@ -15,6 +16,7 @@ import EvidenceAuditControl from './components/EvidenceAuditControl';
 const App: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<Menu>(Menu.INICIO);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isControlsOpen, setIsControlsOpen] = useState(true);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ const App: React.FC = () => {
   }, []);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const toggleControls = () => setIsControlsOpen(!isControlsOpen);
 
   const renderContent = () => {
     switch(activeMenu) {
@@ -40,20 +43,13 @@ const App: React.FC = () => {
 
   const getMenuTitle = () => {
     switch(activeMenu) {
-      case Menu.INICIO: return 'Dashboard Operacional';
+      case Menu.INICIO: return 'Dashboard';
       case Menu.CONSULTA_TECNICA: return 'Pesquisa de Dados';
       case Menu.CONTROLE_LEITURISTA: return 'Controle de Leiturista';
       case Menu.CONTROLE_EVIDENCIAS: return 'Controle de Evidências';
       default: return 'SAL Enterprise';
     }
   };
-
-  const menuItems = [
-    { id: Menu.INICIO, label: 'Dashboard', icon: <LayoutGrid size={18} /> },
-    { id: Menu.CONSULTA_TECNICA, label: 'Pesquisa', icon: <Search size={18} /> },
-    { id: Menu.CONTROLE_LEITURISTA, label: 'Controle de Leiturista', icon: <Users size={18} /> },
-    { id: Menu.CONTROLE_EVIDENCIAS, label: 'Controle de Evidências', icon: <Camera size={18} /> }
-  ];
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
@@ -62,7 +58,6 @@ const App: React.FC = () => {
           {/* Header Branding - Sidebar */}
           <div className="px-8 py-10 flex flex-col items-start">
             <div className="flex items-center gap-4 group cursor-pointer transition-all duration-300 hover:translate-x-1">
-              {/* Refined Smaller Logo */}
               <div className="relative w-14 h-14 flex items-center justify-center shrink-0">
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-indigo-600 rounded-2xl rotate-12 group-hover:rotate-6 transition-transform duration-500 shadow-xl shadow-indigo-500/20"></div>
                 <div className="absolute inset-0 bg-slate-950 rounded-2xl flex items-center justify-center border border-white/10">
@@ -75,7 +70,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* SAL Text to the Side */}
               <div className="flex flex-col">
                 <h1 className="text-4xl font-black tracking-tighter text-white leading-none">
                   SAL
@@ -84,7 +78,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Tagline below SAL */}
             <div className="mt-4 pl-1">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] leading-tight block">
                 Sistema de Análise de Leitura
@@ -94,20 +87,70 @@ const App: React.FC = () => {
 
           {/* Navigation - Sidebar */}
           <nav className="flex-1 space-y-1 px-6 mt-4 overflow-y-auto custom-scrollbar">
-            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Menus</p>
-            {menuItems.map((item) => (
+            <p className="px-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Menus Principais</p>
+            
+            {/* ITEM: DASHBOARD */}
+            <button
+              onClick={() => {
+                setActiveMenu(Menu.INICIO);
+                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+              }}
+              className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${activeMenu === Menu.INICIO ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+            >
+              <LayoutGrid size={18} className={activeMenu === Menu.INICIO ? 'text-white' : 'text-slate-50'} />
+              Dashboard
+            </button>
+
+            {/* ITEM: PESQUISA */}
+            <button
+              onClick={() => {
+                setActiveMenu(Menu.CONSULTA_TECNICA);
+                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+              }}
+              className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${activeMenu === Menu.CONSULTA_TECNICA ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+            >
+              <Search size={18} className={activeMenu === Menu.CONSULTA_TECNICA ? 'text-white' : 'text-slate-50'} />
+              Pesquisa
+            </button>
+
+            <div className="mt-6 pt-4 border-t border-white/5">
+              {/* GROUP: CONTROLES */}
               <button
-                key={item.id}
-                onClick={() => {
-                  setActiveMenu(item.id);
-                  if (window.innerWidth < 1024) setIsSidebarOpen(false);
-                }}
-                className={`flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 ${activeMenu === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+                onClick={toggleControls}
+                className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-xs font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white transition-all group"
               >
-                <span className={`${activeMenu === item.id ? 'text-white' : 'text-slate-50'}`}>{item.icon}</span>
-                {item.label}
+                <div className="flex items-center gap-4">
+                  <ShieldCheck size={18} className="text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                  <span>Controles</span>
+                </div>
+                {isControlsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
-            ))}
+
+              {/* SUBMENUS */}
+              <div className={`space-y-1 mt-1 overflow-hidden transition-all duration-300 ${isControlsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <button
+                  onClick={() => {
+                    setActiveMenu(Menu.CONTROLE_LEITURISTA);
+                    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ml-2 border-l-2 border-transparent hover:border-emerald-500/50 ${activeMenu === Menu.CONTROLE_LEITURISTA ? 'bg-white/10 text-emerald-400 border-l-emerald-500' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Users size={16} />
+                  Leiturista
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveMenu(Menu.CONTROLE_EVIDENCIAS);
+                    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ml-2 border-l-2 border-transparent hover:border-indigo-500/50 ${activeMenu === Menu.CONTROLE_EVIDENCIAS ? 'bg-white/10 text-indigo-400 border-l-indigo-500' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Camera size={16} />
+                  Evidências
+                </button>
+              </div>
+            </div>
           </nav>
 
           {/* Status Indicator - Bottom Sidebar */}
